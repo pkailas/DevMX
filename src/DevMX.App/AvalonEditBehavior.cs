@@ -14,6 +14,34 @@ namespace DevMX.App;
 public static class AvalonEditBehavior
 {
     private static readonly Dictionary<TextEditor, DiffColorizer> _diffColorizers = new();
+    private static readonly HashSet<TextEditor> _trackedEditors = new();
+
+    static AvalonEditBehavior()
+    {
+        ThemeManager.ThemeChanged += OnThemeChanged;
+    }
+
+    private static void OnThemeChanged()
+    {
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            foreach (var editor in _trackedEditors.ToList())
+            {
+                ApplyEditorTheme(editor);
+            }
+        });
+    }
+
+    private static void ApplyEditorTheme(TextEditor editor)
+    {
+        var resources = Application.Current.Resources;
+        if (resources["EditorBackgroundBrush"] is Brush bg)
+            editor.Background = bg;
+        if (resources["EditorForegroundBrush"] is Brush fg)
+            editor.Foreground = fg;
+        if (resources["DimBrush"] is Brush dim)
+            editor.LineNumbersForeground = dim;
+    }
 
     #region BoundText
 
@@ -35,6 +63,20 @@ public static class AvalonEditBehavior
         if (d is TextEditor editor)
         {
             editor.Text = (string)e.NewValue;
+        }
+    }
+
+    private static void EditorAttach(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextEditor editor)
+        {
+            _trackedEditors.Add(editor);
+            ApplyEditorTheme(editor);
+            editor.Unloaded += (s, ev) =>
+            {
+                _trackedEditors.Remove(editor);
+                _diffColorizers.Remove(editor);
+            };
         }
     }
 
@@ -105,6 +147,21 @@ public static class AvalonEditBehavior
         {
             // TextView may not be initialized yet; hook Loaded event
             editor.Loaded += EditorLoaded;
+            // Also track for theme changes
+            if (!_trackedEditors.Contains(editor))
+            {
+                _trackedEditors.Add(editor);
+                editor.Loaded += (s, e) =>
+                {
+                    _trackedEditors.Add(editor);
+                    ApplyEditorTheme(editor);
+                    editor.Unloaded += (s2, e2) =>
+                    {
+                        _trackedEditors.Remove(editor);
+                        _diffColorizers.Remove(editor);
+                    };
+                };
+            }
             return;
         }
 
@@ -124,6 +181,22 @@ public static class AvalonEditBehavior
                 ApplyDiffColorizer(editor, textView, isDiff);
             }
         }
+    }
+
+    /// <summary>Apply theme colors to an editor when attached via Loaded event.</summary>
+    public static void ApplyThemeToEditor(TextEditor editor)
+    {
+        if (!_trackedEditors.Contains(editor))
+        {
+            _trackedEditors.Add(editor);
+            editor.Loaded += EditorAttach;
+            editor.Unloaded += (s, e) =>
+            {
+                _trackedEditors.Remove(editor);
+                _diffColorizers.Remove(editor);
+            };
+        }
+        ApplyEditorTheme(editor);
     }
 
     private static void ApplyDiffColorizer(TextEditor editor, TextView textView, bool isDiff)
@@ -151,12 +224,22 @@ public static class AvalonEditBehavior
 
 /// <summary>
 /// Colorizes diff lines based on line prefix: + (green), - (red), @@ (blue).
+/// Reads brushes from application resources for theme awareness.
 /// </summary>
 public class DiffColorizer : DocumentColorizingTransformer
 {
-    private static readonly Brush AddBackground = new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x1E));
-    private static readonly Brush RemoveBackground = new SolidColorBrush(Color.FromRgb(0x3A, 0x1E, 0x1E));
-    private static readonly Brush ContextBackground = new SolidColorBrush(Color.FromRgb(0x1E, 0x2A, 0x3A));
+    private Brush GetBrush(string key)
+    {
+        if (Application.Current.Resources[key] is Brush brush)
+            return brush;
+        // Fallback to dark theme colors
+        return key switch
+        {
+            "DiffAddBrush" => new SolidColorBrush(Color.FromRgb(0x1E, 0x3A, 0x1E)),
+            "DiffRemoveBrush" => new SolidColorBrush(Color.FromRgb(0x3A, 0x1E, 0x1E)),
+            _ => new SolidColorBrush(Color.FromRgb(0x1E, 0x2A, 0x3A)),
+        };
+    }
 
     protected override void ColorizeLine(DocumentLine line)
     {
@@ -165,11 +248,11 @@ public class DiffColorizer : DocumentColorizingTransformer
 
         var trimmed = text.TrimStart();
         if (trimmed.StartsWith("+"))
-            background = AddBackground;
+            background = GetBrush("DiffAddBrush");
         else if (trimmed.StartsWith("-"))
-            background = RemoveBackground;
+            background = GetBrush("DiffRemoveBrush");
         else if (trimmed.StartsWith("@@"))
-            background = ContextBackground;
+            background = GetBrush("DiffHunkBrush");
 
         if (background != null)
         {

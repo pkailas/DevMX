@@ -14,6 +14,7 @@ public partial class MainViewModel : ObservableObject
     private readonly DevMxSettings _settings;
     private AppSession _session;
     private readonly Action<Action> _dispatch;
+    private readonly Action<string> _onThemeChanged;
 
     [ObservableProperty]
     private bool isSidebarExpanded = true;
@@ -25,11 +26,12 @@ public partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool isBusy;
 
-    public MainViewModel(DevMxSettings settings, AppSession session, Action<Action> dispatch)
+    public MainViewModel(DevMxSettings settings, AppSession session, Action<Action> dispatch, Action<string> onThemeChanged = null!)
     {
         _settings = settings;
         _session = session;
         _dispatch = dispatch;
+        _onThemeChanged = onThemeChanged;
 
         var chatVm = new ChatViewModel(session, dispatch);
         Sidebar = new SidebarViewModel(session, dispatch, chatVm.ClearEntries);
@@ -112,7 +114,7 @@ public partial class MainViewModel : ObservableObject
         Settings = new SettingsViewModel(settings, () =>
         {
             _ = ApplyAndReconnectAsync();
-        });
+        }, _onThemeChanged);
     }
 
     public async Task InitializeAsync()

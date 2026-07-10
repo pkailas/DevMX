@@ -1,0 +1,22 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ===== BRUSHES (Light Palette) ===== -->
+  <SolidColorBrush x:Key="WindowBackground" Color="#F5F5F5"/>
+  <SolidColorBrush x:Key="PanelBackground" Color="#EBEBEB"/>
+  <SolidColorBrush x:Key="BorderBrush" Color="#C8C8C8"/>
+  <SolidColorBrush x:Key="ForegroundBrush" Color="#1E1E1E"/>
+  <SolidColorBrush x:Key="DimBrush" Color="#707070"/>
+  <SolidColorBrush x:Key="AccentBrush" Color="#0E639C"/>
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#1177BB"/>
+  <SolidColorBrush x:Key="InputBackground" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="SplitterBrush" Color="#EBEBEB"/>
+  <SolidColorBrush x:Key="DisabledBackgroundBrush" Color="#DDDDDD"/>
+  <SolidColorBrush x:Key="DisabledBorderBrush" Color="#C8C8C8"/>
+  <SolidColorBrush x:Key="DiffAddBrush" Color="#D8F0D8"/>
+  <SolidColorBrush x:Key="DiffRemoveBrush" Color="#F5D8D8"/>
+  <SolidColorBrush x:Key="DiffHunkBrush" Color="#D8E4F5"/>
+  <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="EditorForegroundBrush" Color="#1E1E1E"/>
+
+</ResourceDictionary>

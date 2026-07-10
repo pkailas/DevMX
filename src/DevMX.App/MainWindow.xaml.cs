@@ -26,7 +26,7 @@ public partial class MainWindow : Window
         _session = new AppSession(_settings);
         Action<Action> dispatch = (action) => Dispatcher.Invoke(action);
 
-        var vm = new MainViewModel(_settings, _session, dispatch);
+        var vm = new MainViewModel(_settings, _session, dispatch, theme => ThemeManager.Apply(theme));
         DataContext = vm;
 
         ((INotifyPropertyChanged)vm).PropertyChanged += OnViewModelPropertyChanged;

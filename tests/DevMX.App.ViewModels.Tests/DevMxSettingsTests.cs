@@ -22,7 +22,8 @@ public class DevMxSettingsTests
                 Model = "gpt-4o-mini",
                 Provider = "anthropic",
                 WorkDir = @"C:\my\work",
-                ServerExe = @"C:\custom\server.exe"
+                ServerExe = @"C:\custom\server.exe",
+                Theme = "light"
             };
 
             // Save to temp location
@@ -47,6 +48,7 @@ public class DevMxSettingsTests
             Assert.Equal(original.Provider, loaded.Provider);
             Assert.Equal(original.WorkDir, loaded.WorkDir);
             Assert.Equal(original.ServerExe, loaded.ServerExe);
+            Assert.Equal(original.Theme, loaded.Theme);
         }
         finally
         {
@@ -66,6 +68,7 @@ public class DevMxSettingsTests
         Assert.Equal(string.Empty, settings.Model);
         Assert.Equal(DevMxSettings.DefaultWorkDir, settings.WorkDir);
         Assert.Equal(DevMxSettings.DefaultServerExe, settings.ServerExe);
+        Assert.Equal("dark", settings.Theme);
     }
 
     [Fact]
@@ -110,5 +113,38 @@ public class DevMxSettingsTests
         {
             try { Directory.Delete(tempDir, true); } catch { }
         }
+    }
+
+    [Fact]
+    public void SettingsViewModel_ChangingTheme_RaisesCallback()
+    {
+        // Arrange
+        var settings = new DevMxSettings { Theme = "dark" };
+        string? capturedTheme = null;
+        var vm = new SettingsViewModel(settings, () => { }, theme => capturedTheme = theme);
+
+        // Constructor sets Theme = settings.Theme, which triggers the callback
+        Assert.Equal("dark", vm.Theme);
+        Assert.Equal("dark", capturedTheme); // callback fired during construction
+
+        // Act - change to light
+        vm.Theme = "light";
+
+        // Assert
+        Assert.Equal("light", vm.Theme);
+        Assert.Equal("light", capturedTheme); // callback fired with new value
+        Assert.Equal("light", settings.Theme); // persisted immediately
+    }
+
+    [Fact]
+    public void SettingsViewModel_ThemeOptions_ReturnsDarkAndLight()
+    {
+        // Arrange
+        var settings = new DevMxSettings();
+        var vm = new SettingsViewModel(settings, () => { });
+
+        // Assert
+        var options = vm.ThemeOptions.ToList();
+        Assert.Equal(new[] { "dark", "light" }, options);
     }
 }

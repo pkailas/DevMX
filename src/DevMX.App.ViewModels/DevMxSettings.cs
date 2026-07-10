@@ -16,6 +16,7 @@ public sealed record DevMxSettings
     public string Endpoint { get; set; } = DefaultEndpoint;
     public string Model { get; set; } = string.Empty;
     public string Provider { get; set; } = "openai";
+    public string Theme { get; set; } = "dark";
 
     public static string DefaultSettingsPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevMX", "settings.json");

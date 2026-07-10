@@ -19,7 +19,7 @@
           <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <Border Grid.Column="1"
-                Background="{StaticResource AccentBrush}"
+                Background="{DynamicResource AccentBrush}"
                 CornerRadius="6" Padding="10,6"
                 Margin="0,0,20,0">
           <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
@@ -31,23 +31,23 @@
     <DataTemplate x:Key="AssistantEntryTemplate">
       <Border Margin="0,2" Padding="10,6">
         <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
-                   Foreground="{StaticResource ForegroundBrush}" FontSize="13"/>
+                   Foreground="{DynamicResource ForegroundBrush}" FontSize="13"/>
       </Border>
     </DataTemplate>
 
     <DataTemplate x:Key="ToolEntryTemplate">
       <Border Margin="0,2" Padding="6,3"
-              Background="{StaticResource InputBackground}"
-              BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-        <TextBlock FontFamily="{StaticResource MonospaceFontFamily}"
+              Background="{DynamicResource InputBackground}"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+        <TextBlock FontFamily="{DynamicResource MonospaceFontFamily}"
                    FontSize="12">
           <TextBlock.Style>
             <Style TargetType="TextBlock">
               <Setter Property="Text" Value="{Binding Text}"/>
-              <Setter Property="Foreground" Value="{StaticResource DimBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
               <Style.Triggers>
                 <DataTrigger Binding="{Binding IsClickable}" Value="True">
-                  <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                  <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                   <Setter Property="TextDecorations" Value="Underline"/>
                   <Setter Property="Cursor" Value="Hand"/>
                 </DataTrigger>
@@ -65,11 +65,11 @@
 
     <DataTemplate x:Key="InfoEntryTemplate">
       <Border Margin="0,4" Padding="8,6"
-              Background="#2a2a4a"
-              BorderBrush="#4a90d9" BorderThickness="1"
+              Background="{DynamicResource PanelBackground}"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
               CornerRadius="4">
         <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
-                   FontSize="12" Foreground="#8ab4f8" FontStyle="Italic"/>
+                   FontSize="12" Foreground="{DynamicResource DimBrush}" FontStyle="Italic"/>
       </Border>
     </DataTemplate>
 
@@ -111,13 +111,13 @@
     </Grid.ColumnDefinitions>
 
     <!-- ===== RAIL (far left) ===== -->
-    <Border Grid.Column="0" Background="{StaticResource PanelBackground}"
-            BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+    <Border Grid.Column="0" Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
       <Grid>
         <!-- Collapsed rail (44px wide, icon buttons) -->
         <StackPanel x:Name="CollapsedRail" Width="44" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
-                    Background="{StaticResource PanelBackground}">
+                    Background="{DynamicResource PanelBackground}">
           <Button Content="≡" FontSize="18" Padding="6,10"
                   HorizontalAlignment="Stretch" VerticalAlignment="Top"
                   Command="{Binding ToggleSidebarCommand}"
@@ -133,11 +133,11 @@
         <!-- Expanded rail (260px wide, sidebar content) -->
         <StackPanel x:Name="ExpandedRail" Width="260" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
-                    Background="{StaticResource PanelBackground}">
+                    Background="{DynamicResource PanelBackground}">
           <!-- Header -->
           <StackPanel Orientation="Horizontal" Margin="10,8,10,4">
             <TextBlock Text="Conversations" FontSize="12" FontWeight="SemiBold"
-                       Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
+                       Foreground="{DynamicResource DimBrush}" VerticalAlignment="Center"/>
           </StackPanel>
 
           <!-- Conversation list -->
@@ -154,13 +154,13 @@
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
                     <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                               FontSize="12" Foreground="{StaticResource ForegroundBrush}"/>
+                               FontSize="12" Foreground="{DynamicResource ForegroundBrush}"/>
                     <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}"
-                               FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                               FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                   </StackPanel>
                   <Button Grid.Column="1" Content="×" FontSize="10" Padding="2,0,4,0"
                           Background="Transparent" BorderThickness="0"
-                          Foreground="{StaticResource DimBrush}"
+                          Foreground="{DynamicResource DimBrush}"
                           Command="{Binding DataContext.Sidebar.DeleteConversationCommand,
                                       RelativeSource={RelativeSource AncestorType=ListBox}}"
                           CommandParameter="{Binding}"
@@ -191,49 +191,57 @@
 
           <!-- Settings pane -->
           <Border Margin="8,8,8,8" Padding="8"
-                  BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                  Background="{StaticResource InputBackground}">
+                  BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                  Background="{DynamicResource InputBackground}">
             <StackPanel>
               <TextBlock Text="Settings" FontSize="12" FontWeight="SemiBold"
-                         Foreground="{StaticResource DimBrush}" Margin="0,0,0,6"/>
+                         Foreground="{DynamicResource DimBrush}" Margin="0,0,0,6"/>
 
               <!-- Endpoint -->
               <StackPanel Margin="0,2">
-                <TextBlock Text="Endpoint" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBlock Text="Endpoint" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                 <TextBox Text="{Binding Settings.Endpoint, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="11" Padding="4,2"/>
               </StackPanel>
 
               <!-- Model -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Model (empty = auto)" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBlock Text="Model (empty = auto)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                 <TextBox Text="{Binding Settings.Model, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="11" Padding="4,2"/>
               </StackPanel>
 
               <!-- Provider -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Provider (openai / anthropic)" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBlock Text="Provider (openai / anthropic)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                 <TextBox Text="{Binding Settings.Provider, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="11" Padding="4,2"/>
               </StackPanel>
 
               <!-- Workdir -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Workdir" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBlock Text="Workdir" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                 <TextBox Text="{Binding Settings.WorkDir, UpdateSourceTrigger=PropertyChanged}"
                          FontSize="11" Padding="4,2"/>
               </StackPanel>
 
+              <!-- Theme selector -->
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Theme" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                <ComboBox ItemsSource="{Binding Settings.ThemeOptions}"
+                          SelectedItem="{Binding Settings.Theme}"
+                          FontSize="11" Padding="4,2"/>
+              </StackPanel>
+
               <!-- Read-only info -->
-              <Border Margin="0,6,0,4" Padding="4" Background="#1a1a2e">
+              <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
                 <StackPanel>
-                  <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}">
+                  <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}">
                     <Run Text="MCP Server:" FontWeight="SemiBold"/>
                     <LineBreak/>
                     <Run Text="{Binding Settings.ServerExe, Mode=OneWay}" FontSize="9"/>
                   </TextBlock>
-                  <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}" Margin="0,2,0,0">
+                  <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0">
                     <Run Text="API Key:" FontWeight="SemiBold"/>
                     <LineBreak/>
                     <Run Text="{Binding Settings.ApiKeySource, Mode=OneWay}" FontSize="9"/>
@@ -294,7 +302,7 @@
                 <TextBlock Text="{Binding Title}" Margin="0,0,6,0"/>
                 <Button Content="×" FontSize="10" Padding="2,0,4,0"
                         Background="Transparent" BorderThickness="0"
-                        Foreground="{StaticResource DimBrush}"
+                        Foreground="{DynamicResource DimBrush}"
                         Command="{Binding DataContext.Viewer.CloseTabCommand,
                                     RelativeSource={RelativeSource AncestorType=TabControl}}"
                         CommandParameter="{Binding}"
@@ -303,8 +311,8 @@
                     <Style TargetType="Button">
                       <Style.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                          <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
-                          <Setter Property="Background" Value="{StaticResource InputBackground}"/>
+                          <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                          <Setter Property="Background" Value="{DynamicResource InputBackground}"/>
                         </Trigger>
                       </Style.Triggers>
                     </Style>
@@ -321,27 +329,27 @@
                   app:AvalonEditBehavior.IsDiff="{Binding Kind, Converter={StaticResource EnumToBool}, ConverterParameter=Diff}"
                   IsReadOnly="True"
                   ShowLineNumbers="True"
-                  FontFamily="{StaticResource MonospaceFontFamily}"
+                  FontFamily="{DynamicResource MonospaceFontFamily}"
                   FontSize="12"
                   WordWrap="False"
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
                   BorderThickness="0"
                   Padding="4"
-                  Background="#1E1E1E"
-                  Foreground="#D4D4D4"/>
+                  Background="{DynamicResource EditorBackgroundBrush}"
+                  Foreground="{DynamicResource EditorForegroundBrush}"/>
             </DataTemplate>
            </TabControl.ContentTemplate>
         </TabControl>
 
         <!-- Horizontal GridSplitter -->
         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch"
-                      VerticalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="{StaticResource SplitterBrush}"
+                      VerticalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="{DynamicResource SplitterBrush}"
                       ShowsPreview="True"/>
 
         <!-- Task Monitor -->
-        <Border Grid.Row="2" Background="{StaticResource PanelBackground}"
-                BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Background="{DynamicResource PanelBackground}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0">
           <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -352,7 +360,7 @@
           <!-- Task list header -->
           <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,4">
             <TextBlock Text="Tasks" FontSize="12" FontWeight="SemiBold"
-                       Foreground="{StaticResource DimBrush}"/>
+                       Foreground="{DynamicResource DimBrush}"/>
           </StackPanel>
 
           <!-- Task items -->
@@ -366,20 +374,20 @@
                   <!-- Task header row -->
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding JobId}"
-                               FontFamily="{StaticResource MonospaceFontFamily}"
-                               FontSize="11" Foreground="{StaticResource AccentBrush}"
+                               FontFamily="{DynamicResource MonospaceFontFamily}"
+                               FontSize="11" Foreground="{DynamicResource AccentBrush}"
                                Width="80"/>
                     <!-- State with color coding -->
                     <TextBlock Text="{Binding State}" FontSize="11" Width="55">
                       <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                          <Setter Property="Foreground" Value="{StaticResource DimBrush}"/>
+                          <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
                           <Style.Triggers>
                             <DataTrigger Binding="{Binding State}" Value="queued">
-                              <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                              <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding State}" Value="running">
-                              <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                              <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                             </DataTrigger>
                             <DataTrigger Binding="{Binding State}" Value="done">
                               <Setter Property="Foreground" Value="#4EC94E"/>
@@ -395,7 +403,7 @@
                       </TextBlock.Style>
                     </TextBlock>
                     <TextBlock Text="{Binding Detail}" FontSize="11"
-                               Foreground="{StaticResource ForegroundBrush}"
+                               Foreground="{DynamicResource ForegroundBrush}"
                                TextTrimming="CharacterEllipsis"/>
                   </StackPanel>
                   <!-- Changed files as clickable links -->
@@ -408,8 +416,8 @@
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <TextBlock FontSize="10"
-                                   FontFamily="{StaticResource MonospaceFontFamily}"
-                                   Foreground="{StaticResource AccentBrush}"
+                                   FontFamily="{DynamicResource MonospaceFontFamily}"
+                                   Foreground="{DynamicResource AccentBrush}"
                                    TextDecorations="Underline"
                                    Cursor="Hand"
                                    Margin="0,0,8,0">
@@ -439,15 +447,15 @@
           <TextBox Grid.Row="2"
                    Text="{Binding TaskMonitor.JournalText, Mode=OneWay}"
                    IsReadOnly="True"
-                   FontFamily="{StaticResource MonospaceFontFamily}"
+                   FontFamily="{DynamicResource MonospaceFontFamily}"
                    FontSize="11"
                    TextWrapping="NoWrap"
                    VerticalScrollBarVisibility="Auto"
                    HorizontalScrollBarVisibility="Auto"
                    BorderThickness="0"
                    Padding="8,4"
-                   Background="{StaticResource InputBackground}"
-                   Foreground="{StaticResource DimBrush}"
+                   Background="{DynamicResource InputBackground}"
+                   Foreground="{DynamicResource DimBrush}"
                     AcceptsReturn="True"/>
           </Grid>
         </Border>
@@ -455,12 +463,12 @@
 
       <!-- Vertical GridSplitter -->
       <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center"
-                    VerticalAlignment="Stretch" Background="{StaticResource SplitterBrush}"
+                    VerticalAlignment="Stretch" Background="{DynamicResource SplitterBrush}"
                     ShowsPreview="True"/>
 
       <!-- RIGHT: Chat -->
-      <Border Grid.Column="2" Background="{StaticResource PanelBackground}"
-              BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0">
+      <Border Grid.Column="2" Background="{DynamicResource PanelBackground}"
+              BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0">
         <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
@@ -471,7 +479,7 @@
 
         <!-- Chat header -->
         <TextBlock Grid.Row="0" Text="Chat" FontSize="12" FontWeight="SemiBold"
-                   Foreground="{StaticResource DimBrush}" Padding="10,8"/>
+                   Foreground="{DynamicResource DimBrush}" Padding="10,8"/>
 
         <!-- Chat entries -->
         <ScrollViewer x:Name="ChatScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto"
@@ -509,17 +517,17 @@
        </Grid>
 
         <!-- Status bar (spans both columns) -->
-        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="32" Background="{StaticResource PanelBackground}" Foreground="{StaticResource ForegroundBrush}">
+        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="32" Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource ForegroundBrush}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="12"
-                       Foreground="{StaticResource DimBrush}" Padding="8,2"/>
+                       Foreground="{DynamicResource DimBrush}" Padding="8,2"/>
             <Button Grid.Column="1" Content="Reconnect"
                     Command="{Binding ReconnectCommand}"
-                    FontSize="10" Background="{StaticResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"
+                    FontSize="10" Background="{DynamicResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"
                     ToolTip="Reconnect with current settings"/>
           </Grid>
         </StatusBar>
