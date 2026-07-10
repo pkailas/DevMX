@@ -421,13 +421,13 @@
        </Grid>
 
         <!-- Status bar (spans both columns) -->
-        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="24" Background="{StaticResource PanelBackground}" Foreground="{StaticResource ForegroundBrush}">
+        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="32" Background="{StaticResource PanelBackground}" Foreground="{StaticResource ForegroundBrush}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="11"
+            <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="12"
                        Foreground="{StaticResource DimBrush}" Padding="8,2"/>
             <Button Grid.Column="1" Content="Reconnect"
                     Command="{Binding ReconnectCommand}"
