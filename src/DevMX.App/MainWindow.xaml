@@ -431,7 +431,7 @@
                        Foreground="{StaticResource DimBrush}" Padding="8,2"/>
             <Button Grid.Column="1" Content="Reconnect"
                     Command="{Binding ReconnectCommand}"
-                    FontSize="10" Padding="6,2" Margin="4,2"
+                    FontSize="10" Background="{StaticResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"
                     ToolTip="Reconnect with current settings"/>
           </Grid>
         </StatusBar>
