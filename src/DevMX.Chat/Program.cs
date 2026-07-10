@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using DevMX.Core;
 using DevMX.Core.Persistence;
@@ -7,8 +9,11 @@ using DevMX.Core.Providers;
 string server = @"C:\Users\pkailas\source\repos\DevMind\dist\mcp\DevMind.McpServer.exe";
 string workdir = @"C:\Users\pkailas\source\repos\DevMX";
 string dbPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevMX", "devmx.db");
+string provider = "openai";
+string? endpointOverride = null;
+
 string? modelEnv = Environment.GetEnvironmentVariable("DEVMX_MODEL");
-string model = modelEnv ?? "claude-sonnet-4-5";
+string? model = modelEnv; // may stay null for openai auto-discovery
 
 string[] cmdArgs = Environment.GetCommandLineArgs();
 for (int i = 1; i < cmdArgs.Length; i++)
@@ -19,21 +24,69 @@ for (int i = 1; i < cmdArgs.Length; i++)
         case "--workdir" when i + 1 < cmdArgs.Length: workdir = cmdArgs[++i]; break;
         case "--db" when i + 1 < cmdArgs.Length: dbPath = cmdArgs[++i]; break;
         case "--model" when i + 1 < cmdArgs.Length: model = cmdArgs[++i]; break;
+        case "--provider" when i + 1 < cmdArgs.Length: provider = cmdArgs[++i].ToLowerInvariant(); break;
+        case "--endpoint" when i + 1 < cmdArgs.Length: endpointOverride = cmdArgs[++i]; break;
     }
 }
 
+// Validate provider
+if (provider != "openai" && provider != "anthropic")
+{
+    Console.WriteLine($"Error: Unknown provider '{provider}'. Use 'openai' or 'anthropic'.");
+    Environment.Exit(1);
+}
+
+// Resolve endpoint
+string openaiEndpoint = endpointOverride ?? "http://127.0.0.1:8080/v1";
+
+// Resolve model: anthropic needs a default; openai may auto-discover
+if (provider == "anthropic" && string.IsNullOrEmpty(model))
+    model = "claude-sonnet-4-5";
+
+// ── Model auto-discovery for openai ───────────────────────────────────────────
+string? modelDiscoveryError = null;
+if (provider == "openai" && string.IsNullOrEmpty(model))
+{
+    try
+    {
+        using var discoveryClient = new HttpClient();
+        discoveryClient.Timeout = TimeSpan.FromSeconds(5);
+        var resp = await discoveryClient.GetAsync($"{openaiEndpoint}/models");
+        if (resp.IsSuccessStatusCode)
+        {
+            using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync());
+            if (doc.RootElement.TryGetProperty("data", out var dataArray) && dataArray.GetArrayLength() > 0)
+            {
+                model = dataArray[0].GetProperty("id").GetString();
+                Console.WriteLine($"Model auto-discovered: {model}");
+            }
+        }
+    }
+    catch
+    {
+        // Auto-discovery failed — will show "(unset)" in banner and error at first turn
+        modelDiscoveryError = "Model auto-discovery failed (could not reach /models endpoint).";
+    }
+}
+
+string displayModel = string.IsNullOrEmpty(model) ? "(unset — pass --model)" : model!;
+
 // ── Banner ────────────────────────────────────────────────────────────────────
-string apiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
+string anthropicApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
 Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
 Console.WriteLine("║                   DevMX Chat REPL                       ║");
 Console.WriteLine("╠══════════════════════════════════════════════════════════╣");
 Console.WriteLine($"║  Server : {server,-43}║");
 Console.WriteLine($"║  WorkDir: {workdir,-43}║");
 Console.WriteLine($"║  DB     : {dbPath,-43}║");
-Console.WriteLine($"║  Model  : {model,-43}║");
+Console.WriteLine($"║  Provider: {provider,-42}║");
+Console.WriteLine($"║  Endpoint: {openaiEndpoint,-42}║");
+Console.WriteLine($"║  Model  : {displayModel,-43}║");
 Console.WriteLine("╠══════════════════════════════════════════════════════════╣");
-if (string.IsNullOrEmpty(apiKey))
+if (provider == "anthropic" && string.IsNullOrEmpty(anthropicApiKey))
     Console.WriteLine("║  ⚠  ANTHROPIC_API_KEY MISSING — set it before chatting  ║");
+if (provider == "openai" && string.IsNullOrEmpty(model))
+    Console.WriteLine($"║  ⚠  {modelDiscoveryError ?? "No model set",-49}║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
 Console.WriteLine();
 
@@ -45,7 +98,7 @@ ConversationStore store = await ConversationStore.OpenAsync(dbPath);
 DevMxMcpClient mcp = await DevMxMcpClient.StartAsync(server, workdir, CancellationToken.None);
 
 // ── Create initial conversation ───────────────────────────────────────────────
-long conversationId = await store.CreateConversationAsync("anthropic", model, workdir);
+long conversationId = await store.CreateConversationAsync(provider, model ?? "(unset)", workdir);
 Console.WriteLine($"Conversation #{conversationId} created.");
 Console.WriteLine("Type /help for commands, or start chatting.\n");
 
@@ -66,10 +119,21 @@ AgenticLoop BuildLoop(List<JsonNode>? history = null)
 
 IChatProvider CreateLlm()
 {
-    string key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
-    if (string.IsNullOrEmpty(key))
-        throw new InvalidOperationException("ANTHROPIC_API_KEY environment variable is not set. Set it before chatting.");
-    return new AnthropicClient(key, model);
+    if (provider == "anthropic")
+    {
+        string key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
+        if (string.IsNullOrEmpty(key))
+            throw new InvalidOperationException("ANTHROPIC_API_KEY environment variable is not set. Set it before chatting.");
+        return new AnthropicClient(key, model!);
+    }
+    if (provider == "openai")
+    {
+        if (string.IsNullOrEmpty(model))
+            throw new InvalidOperationException("Model is not set. Pass --model or ensure the endpoint /models endpoint is reachable.");
+        string? openaiKey = Environment.GetEnvironmentVariable("OPENAI_COMPAT_API_KEY");
+        return new OpenAiCompatClient(openaiEndpoint, openaiKey, model!);
+    }
+    throw new InvalidOperationException($"Unknown provider: {provider}");
 }
 
 // ── REPL loop ─────────────────────────────────────────────────────────────────
@@ -133,7 +197,7 @@ try
             string? newTitle = line[4..].Trim();
             try
             {
-                conversationId = await store.CreateConversationAsync("anthropic", model, workdir, newTitle);
+                conversationId = await store.CreateConversationAsync(provider, model ?? "(unset)", workdir, newTitle);
                 titled = !string.IsNullOrEmpty(newTitle);
                 loop = null;
                 Console.WriteLine($"New conversation #{conversationId} created.");
@@ -158,6 +222,21 @@ try
             }
             try
             {
+                // Cross-provider guard: check the conversation's provider matches ours
+                var convos = await store.ListConversationsAsync();
+                var targetConvo = convos.FirstOrDefault(c => c.Id == openId);
+                if (targetConvo is null)
+                {
+                    Console.WriteLine($"Conversation #{openId} not found.");
+                    Console.WriteLine();
+                    continue;
+                }
+                if (targetConvo.Provider != provider)
+                {
+                    Console.WriteLine($"Conversation #{openId} belongs to provider '{targetConvo.Provider}' — restart DevMX.Chat with --provider {targetConvo.Provider} to continue it.");
+                    Console.WriteLine();
+                    continue;
+                }
                 var history = await AgenticLoop.LoadHistoryAsync(store, openId);
                 conversationId = openId;
                 loop = BuildLoop(history);
