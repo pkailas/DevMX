@@ -14,15 +14,19 @@ public partial class ChatViewModel : ObservableObject
     private ObservableCollection<ChatEntryViewModel> entries;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private string inputText = string.Empty;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private bool isBusy;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private bool isInitialized;
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SendCommand))]
     private bool isSendDisabled;
 
     /// <summary>Inverse of IsSendDisabled — used for IsEnabled binding on the input TextBox.</summary>

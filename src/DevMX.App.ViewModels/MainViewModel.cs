@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
     private string statusText = "Initializing...";
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool isBusy;
 
     public MainViewModel(DevMxSettings settings, AppSession session, Action<Action> dispatch)
