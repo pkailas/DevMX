@@ -356,17 +356,80 @@
           </StackPanel>
 
           <!-- Task items -->
-          <ListBox Grid.Row="1" ItemsSource="{Binding TaskMonitor.Tasks}"
+          <ListBox Grid.Row="1"
+                   ItemsSource="{Binding TaskMonitor.Tasks}"
+                   SelectedItem="{Binding TaskMonitor.SelectedTask, Mode=TwoWay}"
                    BorderThickness="0" Margin="4,0,4,2">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <StackPanel Orientation="Horizontal" Margin="2,1">
-                  <TextBlock Text="{Binding JobId}" FontFamily="{StaticResource MonospaceFontFamily}"
-                             FontSize="11" Foreground="{StaticResource AccentBrush}" Width="60"/>
-                  <TextBlock Text="{Binding State}" FontSize="11"
-                             Foreground="{StaticResource DimBrush}" Width="50"/>
-                  <TextBlock Text="{Binding Detail}" FontSize="11"
-                             Foreground="{StaticResource ForegroundBrush}"/>
+                <StackPanel Margin="2,1">
+                  <!-- Task header row -->
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding JobId}"
+                               FontFamily="{StaticResource MonospaceFontFamily}"
+                               FontSize="11" Foreground="{StaticResource AccentBrush}"
+                               Width="80"/>
+                    <!-- State with color coding -->
+                    <TextBlock Text="{Binding State}" FontSize="11" Width="55">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Foreground" Value="{StaticResource DimBrush}"/>
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding State}" Value="queued">
+                              <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding State}" Value="running">
+                              <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding State}" Value="done">
+                              <Setter Property="Foreground" Value="#4EC94E"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding State}" Value="failed">
+                              <Setter Property="Foreground" Value="#F44747"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding State}" Value="cancelled">
+                              <Setter Property="Foreground" Value="#F44747"/>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{Binding Detail}" FontSize="11"
+                               Foreground="{StaticResource ForegroundBrush}"
+                               TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                  <!-- Changed files as clickable links -->
+                  <ItemsControl ItemsSource="{Binding ChangedFiles}" Margin="90,2,0,0">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal"/>
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock FontSize="10"
+                                   FontFamily="{StaticResource MonospaceFontFamily}"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   TextDecorations="Underline"
+                                   Cursor="Hand"
+                                   Margin="0,0,8,0">
+                          <TextBlock.Text>
+                            <MultiBinding StringFormat="{}{0}">
+                              <Binding/>
+                            </MultiBinding>
+                          </TextBlock.Text>
+                          <TextBlock.ToolTip>
+                            <TextBlock Text="Click to view diff"/>
+                          </TextBlock.ToolTip>
+                          <TextBlock.InputBindings>
+                            <MouseBinding Gesture="LeftClick"
+                                          Command="{Binding DataContext.TaskMonitor.OpenDiffForFileCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                          CommandParameter="{Binding}"/>
+                          </TextBlock.InputBindings>
+                        </TextBlock>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>

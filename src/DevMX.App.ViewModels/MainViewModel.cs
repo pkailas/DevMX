@@ -40,12 +40,27 @@ public partial class MainViewModel : ObservableObject
         });
         Chat = chatVm;
         Viewer = new ViewerViewModel();
-        TaskMonitor = new TaskMonitorViewModel();
+        TaskMonitor = new TaskMonitorViewModel(dispatch);
+
+        // Wire TaskMonitor callbacks to AppSession
+        TaskMonitor.SetPollTaskCallback(async (jobId) => await session.PollTaskAsync(jobId));
+        TaskMonitor.SetFetchResultCallback(async (jobId) => await session.FetchTaskResultAsync(jobId));
+        TaskMonitor.SetFetchDiffCallback(async (filePath) => await session.FetchDiffAsync(filePath));
+        TaskMonitor.SetOpenDiffTabCallback((title, diffText) =>
+        {
+            _dispatch(() => Viewer.OpenDiffTab(title, diffText));
+        });
 
         // Wire viewer callbacks into ChatViewModel
         chatVm.SetOpenDiffTabCallback((title, diffText) =>
         {
             _dispatch(() => Viewer.OpenDiffTab(title, diffText));
+        });
+
+        // Wire ChatViewModel onToolResult to TaskMonitor for task event tracking
+        chatVm.SetTaskToolResultCallback((toolName, argJson, resultText) =>
+        {
+            HandleTaskToolResult(toolName, argJson, resultText);
         });
         chatVm.SetOpenFileCallback(async (filePath) =>
         {
@@ -88,6 +103,10 @@ public partial class MainViewModel : ObservableObject
                 Chat.ClearProviderMismatch();
             });
         };
+        Sidebar.OnDelegationsLoaded += (delegations) =>
+        {
+            TaskMonitor.PopulateFromDelegations(delegations);
+        };
 
         // Settings pane
         Settings = new SettingsViewModel(settings, () =>
@@ -117,6 +136,9 @@ public partial class MainViewModel : ObservableObject
 
             // Populate sidebar from store
             await Sidebar.PopulateConversationsAsync(_session.ConversationId);
+
+            // Start task monitor polling loop
+            TaskMonitor.StartPolling();
         }
         catch (Exception ex)
         {
@@ -223,6 +245,12 @@ public partial class MainViewModel : ObservableObject
         var newChat = new ChatViewModel(_session, _dispatch);
         newChat.SetAutoTitleCallback(async (msg) => await Sidebar.AutoTitleAsync(msg));
 
+        // Re-wire TaskMonitor callbacks to new session
+        TaskMonitor.StopPolling();
+        TaskMonitor.SetPollTaskCallback(async (jobId) => await _session.PollTaskAsync(jobId));
+        TaskMonitor.SetFetchResultCallback(async (jobId) => await _session.FetchTaskResultAsync(jobId));
+        TaskMonitor.SetFetchDiffCallback(async (filePath) => await _session.FetchDiffAsync(filePath));
+
         // Re-wire viewer callbacks
         newChat.SetOpenDiffTabCallback((title, diffText) =>
         {
@@ -261,6 +289,16 @@ public partial class MainViewModel : ObservableObject
         {
             _dispatch(() => newChat.ClearProviderMismatch());
         };
+        newSidebar.OnDelegationsLoaded += (delegations) =>
+        {
+            TaskMonitor.PopulateFromDelegations(delegations);
+        };
+
+        // Wire ChatViewModel onToolResult to TaskMonitor for task event tracking
+        newChat.SetTaskToolResultCallback((toolName, argJson, resultText) =>
+        {
+            HandleTaskToolResult(toolName, argJson, resultText);
+        });
 
         // Replace ViewModel references
         Chat = newChat;
@@ -277,6 +315,9 @@ public partial class MainViewModel : ObservableObject
         });
 
         await newSidebar.PopulateConversationsAsync(_session.ConversationId);
+
+        // Restart task monitor polling loop
+        TaskMonitor.StartPolling();
     }
 
     public async ValueTask DisposeSessionAsync()
@@ -292,6 +333,83 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool CanReconnect() => !IsBusy;
+
+    /// <summary>
+    /// Handles task-related tool results from the agentic loop and updates the TaskMonitor.
+    /// </summary>
+    private void HandleTaskToolResult(string toolName, string argJson, string resultText)
+    {
+        try
+        {
+            if (toolName == "devmind_task_start")
+            {
+                // Parse job_id and prompt from result/args
+                var resultObj = System.Text.Json.Nodes.JsonNode.Parse(resultText)?.AsObject();
+                string? jobId = resultObj?["job_id"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(jobId)) return;
+
+                // Extract prompt from args for detail text
+                string detail = "";
+                var argObj = System.Text.Json.Nodes.JsonNode.Parse(argJson)?.AsObject();
+                if (argObj != null)
+                {
+                    foreach (var key in new[] { "prompt", "brief", "task" })
+                    {
+                        if (argObj.ContainsKey(key))
+                        {
+                            detail = argObj[key]?.GetValue<string>() ?? "";
+                            break;
+                        }
+                    }
+                }
+                // Truncate detail to ~80 chars
+                if (detail.Length > 80)
+                    detail = detail[..80] + "\u2026";
+
+                TaskMonitor.AddOrUpdateTask(jobId, "queued", detail, isLive: true);
+            }
+            else if (toolName == "devmind_task_status")
+            {
+                var resultObj = System.Text.Json.Nodes.JsonNode.Parse(resultText)?.AsObject();
+                if (resultObj == null) return;
+
+                string? jobId = resultObj["job_id"]?.GetValue<string>();
+                string? state = resultObj["state"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(jobId) || string.IsNullOrEmpty(state)) return;
+
+                // Update existing task state
+                TaskMonitor.UpdateTaskResult(jobId, state);
+            }
+            else if (toolName == "devmind_task_result")
+            {
+                var resultObj = System.Text.Json.Nodes.JsonNode.Parse(resultText)?.AsObject();
+                if (resultObj == null) return;
+
+                string? jobId = resultObj["job_id"]?.GetValue<string>();
+                string? state = resultObj["state"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(jobId)) return;
+
+                // Extract journal and answer text
+                string? journalText = null;
+                string? answerText = null;
+
+                if (resultObj.ContainsKey("journal"))
+                    journalText = resultObj["journal"]?.GetValue<string>();
+                if (resultObj.ContainsKey("answer"))
+                    answerText = resultObj["answer"]?.GetValue<string>();
+
+                // If no structured fields, use the whole result as journal
+                if (string.IsNullOrEmpty(journalText) && string.IsNullOrEmpty(answerText))
+                    journalText = resultText;
+
+                TaskMonitor.UpdateTaskResult(jobId, state ?? "done", journalText, answerText);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainViewModel] HandleTaskToolResult error: {ex.Message}");
+        }
+    }
 
     [RelayCommand]
     private void ToggleSidebar()

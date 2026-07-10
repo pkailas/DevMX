@@ -212,6 +212,102 @@ public sealed class AppSession : IAsyncDisposable
     }
 
     /// <summary>
+    /// Polls the status of a background task by calling the MCP devmind_task_status tool.
+    /// Returns the raw JSON result string.
+    /// </summary>
+    public async Task<string> PollTaskAsync(string jobId)
+    {
+        if (_mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        return await _mcp.CallToolAsync("devmind_task_status",
+            new Dictionary<string, object?> { ["job_id"] = jobId });
+    }
+
+    /// <summary>
+    /// Fetches the result of a completed task by calling the MCP devmind_task_result tool.
+    /// Returns the raw JSON result string (contains journal/answer).
+    /// </summary>
+    public async Task<string> FetchTaskResultAsync(string jobId)
+    {
+        if (_mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        return await _mcp.CallToolAsync("devmind_task_result",
+            new Dictionary<string, object?> { ["job_id"] = jobId });
+    }
+
+    /// <summary>
+    /// Fetches a diff for a file by calling the MCP diff_file tool.
+    /// Verifies the exact arg name from the tool's input schema at runtime.
+    /// Returns the raw diff text.
+    /// </summary>
+    public async Task<string> FetchDiffAsync(string filePath)
+    {
+        if (_mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        // Look up the exact arg name from the tool schema
+        var argName = "filename"; // default fallback
+        try
+        {
+            var tools = await _mcp.ListToolsAsync();
+            var diffTool = tools.FirstOrDefault(t => t.ProtocolTool.Name == "diff_file");
+            if (diffTool?.ProtocolTool.InputSchema.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+            {
+                var schema = System.Text.Json.Nodes.JsonNode.Parse(diffTool.ProtocolTool.InputSchema.GetRawText())
+                    as System.Text.Json.Nodes.JsonObject;
+                // Check for properties in the schema
+                if (schema != null)
+                {
+                    foreach (var kvp in schema)
+                    {
+                        if (kvp.Key.Equals("filename", StringComparison.OrdinalIgnoreCase) ||
+                            kvp.Key.Equals("path", StringComparison.OrdinalIgnoreCase) ||
+                            kvp.Key.Equals("file", StringComparison.OrdinalIgnoreCase))
+                        {
+                            argName = kvp.Key;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort — use default arg name
+        }
+
+        var result = await _mcp.CallToolAsync("diff_file",
+            new Dictionary<string, object?> { [argName] = filePath });
+
+        // Strip banner lines like FetchFileAsync does
+        return StripToolBanner(result);
+    }
+
+    private static string StripToolBanner(string result)
+    {
+        var lines = result.Split('\n');
+        int firstFence = -1, lastFence = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Trim().StartsWith("```"))
+            {
+                if (firstFence < 0) firstFence = i;
+                lastFence = i;
+            }
+        }
+
+        if (firstFence >= 0 && lastFence > firstFence)
+            return string.Join("\n", lines[(firstFence + 1)..lastFence]);
+
+        var startIdx = 0;
+        while (startIdx < lines.Length && lines[startIdx].TrimStart().StartsWith("["))
+            startIdx++;
+        return string.Join("\n", lines[startIdx..]);
+    }
+
+    /// <summary>
     /// Creates a new conversation and resets the AgenticLoop.
     /// Returns the new conversation ID.
     /// </summary>

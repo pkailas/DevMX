@@ -154,6 +154,17 @@ public partial class SidebarViewModel : ObservableObject
                 foreach (var entry in entries)
                     OnAddEntry?.Invoke(entry);
             });
+
+            // Load delegations for the task monitor
+            try
+            {
+                var delegations = await _session.Store!.GetDelegationsAsync(id);
+                OnDelegationsLoaded?.Invoke(delegations);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SidebarViewModel] GetDelegations failed: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {
@@ -202,6 +213,9 @@ public partial class SidebarViewModel : ObservableObject
 
     /// <summary>Fired when loading history entries for an opened conversation.</summary>
     public event Action<ChatEntryViewModel>? OnAddEntry;
+
+    /// <summary>Fired when delegations are loaded for an opened conversation.</summary>
+    public event Action<IReadOnlyList<DevMX.Core.Persistence.StoredDelegation>>? OnDelegationsLoaded;
 
     [RelayCommand]
     private async Task NewConversationAsync()

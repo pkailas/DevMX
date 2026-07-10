@@ -12,6 +12,13 @@ public partial class ChatViewModel : ObservableObject
     private Func<string, Task>? _onTurnComplete;
     private Action<string, string>? _openDiffTab;
     private Func<string, Task>? _openFile;
+    private Action<string, string, string>? _onTaskToolResult;
+
+    /// <summary>Set the callback for notifying the task monitor about task-related tool results.</summary>
+    internal void SetTaskToolResultCallback(Action<string, string, string> callback)
+    {
+        _onTaskToolResult = callback;
+    }
 
     // Tool names that carry a file path in their args
     private static readonly HashSet<string> FileToolNames = new()
@@ -211,6 +218,9 @@ public partial class ChatViewModel : ObservableObject
                             _openDiffTab($"diff: {title}", resultText);
                         });
                     }
+
+                    // Notify task monitor about task-related tool results
+                    _onTaskToolResult?.Invoke(name, argJson, resultText);
                 },
                 ct: CancellationToken.None);
 
