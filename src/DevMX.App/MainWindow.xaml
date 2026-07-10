@@ -209,12 +209,12 @@
                   <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}">
                     <Run Text="MCP Server:" FontWeight="SemiBold"/>
                     <LineBreak/>
-                    <Run Text="{Binding Settings.ServerExe}" FontSize="9"/>
+                    <Run Text="{Binding Settings.ServerExe, Mode=OneWay}" FontSize="9"/>
                   </TextBlock>
                   <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}" Margin="0,2,0,0">
                     <Run Text="API Key:" FontWeight="SemiBold"/>
                     <LineBreak/>
-                    <Run Text="{Binding Settings.ApiKeySource}" FontSize="9"/>
+                    <Run Text="{Binding Settings.ApiKeySource, Mode=OneWay}" FontSize="9"/>
                   </TextBlock>
                 </StackPanel>
               </Border>
