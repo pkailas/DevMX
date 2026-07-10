@@ -266,10 +266,14 @@ public class AgenticLoopTests : IDisposable
 
         // Assert
         Assert.Equal(2, history.Count);
-        Assert.Equal("user", history[0].Role);
-        Assert.Equal("Hello", history[0].Content[0]!.AsObject()["text"]!.GetValue<string>());
-        Assert.Equal("assistant", history[1].Role);
-        Assert.Equal("Hi there", history[1].Content[0]!.AsObject()["text"]!.GetValue<string>());
+        // History is now List<JsonNode> with { role, content } shape.
+        var msg0 = history[0]!.AsObject();
+        Assert.Equal("user", msg0["role"]!.GetValue<string>());
+        Assert.Equal("Hello", msg0["content"]!.AsArray()[0]!.AsObject()["text"]!.GetValue<string>());
+
+        var msg1 = history[1]!.AsObject();
+        Assert.Equal("assistant", msg1["role"]!.GetValue<string>());
+        Assert.Equal("Hi there", msg1["content"]!.AsArray()[0]!.AsObject()["text"]!.GetValue<string>());
     }
 
     // --- Test 6: Preloaded history continues conversation ---
@@ -280,11 +284,11 @@ public class AgenticLoopTests : IDisposable
         var store = await ConversationStore.OpenAsync(_dbFile);
         var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
 
-        // Preload some history.
-        var history = new List<ChatMessage>
+        // Preload some history as JsonNode messages.
+        var history = new List<JsonNode>
         {
-            new("user", new JsonArray { new JsonObject { ["type"] = "text", ["text"] = "Previous turn" } }),
-            new("assistant", new JsonArray { new JsonObject { ["type"] = "text", ["text"] = "Previous reply" } })
+            new JsonObject { ["role"] = "user", ["content"] = new JsonArray { new JsonObject { ["type"] = "text", ["text"] = "Previous turn" } } },
+            new JsonObject { ["role"] = "assistant", ["content"] = new JsonArray { new JsonObject { ["type"] = "text", ["text"] = "Previous reply" } } }
         };
 
         var responseJson = MakeResponse(MakeTextContent("Final answer"), "end_turn");

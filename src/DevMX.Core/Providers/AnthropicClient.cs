@@ -11,11 +11,13 @@ namespace DevMX.Core.Providers;
 
 /// <summary>
 /// Chat message with content stored as a raw JSON array of content blocks.
+/// Kept for backward compatibility with DevMX.Chat and existing tests.
 /// </summary>
 public sealed record ChatMessage(string Role, JsonArray Content);
 
 /// <summary>
 /// Response from the Anthropic Messages API.
+/// Kept for backward compatibility.
 /// </summary>
 public sealed record AnthropicResponse(
     JsonArray Content,
@@ -25,12 +27,16 @@ public sealed record AnthropicResponse(
 
 /// <summary>
 /// Non-streaming client for the Anthropic Messages API.
+/// Implements IChatProvider for provider-agnostic usage.
 /// </summary>
-public sealed class AnthropicClient
+public sealed class AnthropicClient : IChatProvider
 {
     private readonly string _apiKey;
     private readonly string _model;
     private readonly HttpClient _http;
+
+    public string ProviderName => "anthropic";
+    public string Model => _model;
 
     /// <summary>
     /// Creates a client using the specified API key and model.
@@ -54,6 +60,7 @@ public sealed class AnthropicClient
 
     /// <summary>
     /// Sends a message to the Anthropic API and returns the response.
+    /// Backward-compatible API accepting ChatMessage list.
     /// </summary>
     public async Task<AnthropicResponse> CreateMessageAsync(
         IReadOnlyList<ChatMessage> messages,
@@ -61,11 +68,61 @@ public sealed class AnthropicClient
         string? system,
         CancellationToken ct = default)
     {
+        // Convert ChatMessage list to JsonNode list for the shared implementation.
+        var history = new List<JsonNode>(messages.Count);
+        foreach (var msg in messages)
+        {
+            history.Add(BuildChatMessageNode(msg.Role, msg.Content));
+        }
+        var (contentArray, stopReason, inputTokens, outputTokens) = await CreateMessageAsyncImpl(history, tools, system, ct);
+        return new AnthropicResponse(contentArray, stopReason, inputTokens, outputTokens);
+    }
+
+    /// <summary>
+    /// IChatProvider implementation: sends a message using opaque JsonNode history.
+    /// </summary>
+    public async Task<ProviderResponse> CreateMessageAsync(
+        IReadOnlyList<JsonNode> history,
+        IReadOnlyList<ToolDefinition> tools,
+        string? system,
+        CancellationToken ct = default)
+    {
+        var (contentArray, stopReason, _, _) = await CreateMessageAsyncImpl(history, tools, system, ct);
+
+        // Parse tool calls and text blocks from the content array.
+        var toolCalls = new List<ParsedToolCall>();
+        var textBlocks = new List<string>();
+        foreach (var block in contentArray)
+        {
+            if (block?.AsObject() is not { } blockObj) continue;
+            var type = blockObj["type"]?.GetValue<string>();
+            if (type == "tool_use")
+            {
+                toolCalls.Add(new ParsedToolCall(
+                    blockObj["id"]!.GetValue<string>(),
+                    blockObj["name"]!.GetValue<string>(),
+                    blockObj["input"]!.AsObject()));
+            }
+            else if (type == "text")
+            {
+                textBlocks.Add(blockObj["text"]!.GetValue<string>());
+            }
+        }
+
+        return new ProviderResponse(contentArray, stopReason, toolCalls, textBlocks);
+    }
+
+    private async Task<(JsonArray Content, string StopReason, int InputTokens, int OutputTokens)> CreateMessageAsyncImpl(
+        IReadOnlyList<JsonNode> history,
+        IReadOnlyList<ToolDefinition> tools,
+        string? system,
+        CancellationToken ct)
+    {
         var body = new JsonObject
         {
             ["model"] = _model,
             ["max_tokens"] = 4096,
-            ["messages"] = SerializeMessages(messages)
+            ["messages"] = SerializeJsonNodeMessages(history)
         };
 
         if (system is not null)
@@ -114,23 +171,55 @@ public sealed class AnthropicClient
         var inputTokens = usage["input_tokens"]?.GetValue<int>() ?? 0;
         var outputTokens = usage["output_tokens"]?.GetValue<int>() ?? 0;
 
-        return new AnthropicResponse(contentArray, stopReason, inputTokens, outputTokens);
+        return (contentArray, stopReason, inputTokens, outputTokens);
     }
 
-    private static JsonArray SerializeMessages(IReadOnlyList<ChatMessage> messages)
+    /// <summary>Build a user message JsonNode from plain text (Anthropic format).</summary>
+    public JsonNode BuildUserMessage(string text)
+    {
+        return BuildChatMessageNode("user", new JsonArray
+        {
+            new JsonObject { ["type"] = "text", ["text"] = text }
+        });
+    }
+
+    /// <summary>
+    /// Build tool-result messages (Anthropic: one user message with all tool_result blocks).
+    /// </summary>
+    public IReadOnlyList<JsonNode> BuildToolResultsMessages(
+        IReadOnlyList<(ParsedToolCall Call, string Result)> results)
+    {
+        var contentBlocks = new JsonArray();
+        foreach (var (call, result) in results)
+        {
+            contentBlocks.Add(new JsonObject
+            {
+                ["type"] = "tool_result",
+                ["tool_use_id"] = call.Id,
+                ["content"] = new JsonArray
+                {
+                    new JsonObject { ["type"] = "text", ["text"] = result }
+                }
+            });
+        }
+        return new[] { BuildChatMessageNode("user", contentBlocks) };
+    }
+
+    private static JsonNode BuildChatMessageNode(string role, JsonArray content)
+    {
+        return new JsonObject
+        {
+            ["role"] = role,
+            ["content"] = CloneJsonArray(content)
+        };
+    }
+
+    private static JsonArray SerializeJsonNodeMessages(IReadOnlyList<JsonNode> messages)
     {
         var arr = new JsonArray();
         foreach (var msg in messages)
         {
-            // Clone the content array to avoid "node already has a parent" errors
-            // when the same ChatMessage is sent in multiple API requests.
-            var clonedContent = CloneJsonArray(msg.Content);
-            var obj = new JsonObject
-            {
-                ["role"] = msg.Role,
-                ["content"] = clonedContent
-            };
-            arr.Add(obj);
+            arr.Add(CloneJsonNode(msg));
         }
         return arr;
     }

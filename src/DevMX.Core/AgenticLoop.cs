@@ -10,28 +10,29 @@ namespace DevMX.Core;
 
 /// <summary>
 /// Drives an agentic loop: user prompt → LLM → tool calls → LLM → ... → final answer.
+/// Provider-agnostic: depends on IChatProvider, history is List[JsonNode].
 /// </summary>
 public sealed class AgenticLoop
 {
-    private readonly AnthropicClient _llm;
+    private readonly IChatProvider _llm;
     private readonly IMcpToolExecutor _tools;
     private readonly ConversationStore _store;
     private readonly long _conversationId;
     private readonly string? _systemPrompt;
     private readonly int _maxIterations;
-    private readonly List<ChatMessage> _history;
+    private readonly List<JsonNode> _history;
 
     /// <summary>
     /// Creates a new AgenticLoop starting with an empty conversation history.
     /// </summary>
     public AgenticLoop(
-        AnthropicClient llm,
+        IChatProvider llm,
         IMcpToolExecutor tools,
         ConversationStore store,
         long conversationId,
         string? systemPrompt = null,
         int maxIterations = 50)
-        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<ChatMessage>())
+        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>())
     {
     }
 
@@ -39,13 +40,13 @@ public sealed class AgenticLoop
     /// Creates a new AgenticLoop with preloaded history (e.g. from a reopened conversation).
     /// </summary>
     public AgenticLoop(
-        AnthropicClient llm,
+        IChatProvider llm,
         IMcpToolExecutor tools,
         ConversationStore store,
         long conversationId,
         string? systemPrompt,
         int maxIterations,
-        List<ChatMessage> history)
+        List<JsonNode> history)
     {
         _llm = llm;
         _tools = tools;
@@ -57,17 +58,22 @@ public sealed class AgenticLoop
     }
 
     /// <summary>
-    /// Rebuilds a ChatMessage list from the conversation store for a given conversation.
+    /// Rebuilds a JsonNode history list from the conversation store for a given conversation.
+    /// Each message is wrapped as { "role": ..., "content": ... } for provider-agnostic use.
     /// </summary>
-    public static async Task<List<ChatMessage>> LoadHistoryAsync(ConversationStore store, long conversationId)
+    public static async Task<List<JsonNode>> LoadHistoryAsync(ConversationStore store, long conversationId)
     {
         var messages = await store.GetMessagesAsync(conversationId);
-        var history = new List<ChatMessage>(messages.Count);
+        var history = new List<JsonNode>(messages.Count);
         foreach (var msg in messages)
         {
             var content = JsonNode.Parse(msg.ContentJson) as JsonArray
                 ?? throw new InvalidOperationException($"Invalid content_json in message {msg.Id}: {msg.ContentJson}");
-            history.Add(new ChatMessage(msg.Role, content));
+            history.Add(new JsonObject
+            {
+                ["role"] = msg.Role,
+                ["content"] = content
+            });
         }
         return history;
     }
@@ -82,13 +88,12 @@ public sealed class AgenticLoop
         CancellationToken ct = default)
     {
         // 1. Build user message and append to history + store.
-        var userContent = new JsonArray
-        {
-            new JsonObject { ["type"] = "text", ["text"] = userText }
-        };
-        var userMsg = new ChatMessage("user", userContent);
+        var userMsg = _llm.BuildUserMessage(userText);
         _history.Add(userMsg);
-        await _store.AppendMessageAsync(_conversationId, "user", userContent.ToJsonString());
+
+        // Persist: extract content from the provider's user message format.
+        var userContentJson = ExtractContentJson(userMsg);
+        await _store.AppendMessageAsync(_conversationId, "user", userContentJson);
 
         // Fetch tool definitions once per turn.
         var toolDefs = await _tools.ListToolDefinitionsAsync(ct);
@@ -100,76 +105,66 @@ public sealed class AgenticLoop
             var response = await _llm.CreateMessageAsync(_history, toolDefs, _systemPrompt, ct);
 
             // Append assistant response verbatim to history + store.
-            _history.Add(new ChatMessage("assistant", response.Content));
-            await _store.AppendMessageAsync(_conversationId, "assistant", response.Content.ToJsonString());
+            _history.Add(response.AssistantMessage);
+            await _store.AppendMessageAsync(_conversationId, "assistant", response.AssistantMessage.ToJsonString());
 
             // Invoke callbacks for text blocks.
-            foreach (var block in response.Content)
+            foreach (var text in response.TextBlocks)
             {
-                var blockObj = block?.AsObject();
-                if (blockObj?["type"]?.GetValue<string>() == "text")
-                {
-                    var text = blockObj["text"]?.GetValue<string>() ?? "";
-                    onAssistantText(text);
-                }
+                onAssistantText(text);
             }
 
-            // 3. Check stop reason.
-            if (response.StopReason != "tool_use")
+            // If no tool calls, we are done.
+            if (response.ToolCalls.Count == 0)
             {
-                return;
+                break;
             }
 
-            // 4. Handle tool_use — collect all tool_use blocks, call tools, build tool_result blocks.
-            var toolResults = new JsonArray();
-            foreach (var block in response.Content)
+            // Execute tools and build tool_result messages.
+            var callResults = new List<(ParsedToolCall Call, string Result)>();
+            foreach (var call in response.ToolCalls)
             {
-                var blockObj = block?.AsObject();
-                if (blockObj?["type"]?.GetValue<string>() != "tool_use")
-                    continue;
+                var args = ConvertToJsonDictionary(call.Input);
+                var result = await _tools.CallToolAsync(call.Name, args, ct);
+                onToolCall(call.Name, call.Input.ToJsonString());
+                callResults.Add((call, result));
 
-                var toolUseId = blockObj["id"]?.GetValue<string>() ?? "";
-                var toolName = blockObj["name"]?.GetValue<string>() ?? "";
-                var toolInput = blockObj["input"];
-                var toolInputJson = toolInput?.ToJsonString() ?? "{}";
-
-                // Convert input to dictionary for the executor.
-                var args = ConvertToJsonDictionary(toolInput);
-
-                // Call the tool.
-                var result = await _tools.CallToolAsync(toolName, args, ct);
-
-                // Fire callback.
-                onToolCall(toolName, toolInputJson);
-
-                // Delegation capture (best-effort).
-                try
-                {
-                    CaptureDelegation(toolName, args, result);
-                }
-                catch
-                {
-                    // Swallow parse failures.
-                }
-
-                // Build tool_result block.
-                var resultBlock = new JsonObject
-                {
-                    ["type"] = "tool_result",
-                    ["tool_use_id"] = toolUseId,
-                    ["content"] = new JsonArray
-                    {
-                        new JsonObject { ["type"] = "text", ["text"] = result }
-                    }
-                };
-                toolResults.Add(resultBlock);
+                // Capture delegation lifecycle.
+                CaptureDelegation(call.Name, args, result);
             }
 
-            // Build a single user message with all tool results.
-            var toolResultMsg = new ChatMessage("user", toolResults);
-            _history.Add(toolResultMsg);
-            await _store.AppendMessageAsync(_conversationId, "user", toolResults.ToJsonString());
+            // Build tool result message(s) via the provider.
+            var toolResultMessages = _llm.BuildToolResultsMessages(callResults);
+            foreach (var toolResultMsg in toolResultMessages)
+            {
+                _history.Add(toolResultMsg);
+                var contentJson = ExtractContentJson(toolResultMsg);
+                await _store.AppendMessageAsync(_conversationId, "user", contentJson);
+            }
         }
+    }
+
+    /// <summary>Extract the content JSON from a provider message node for persistence.</summary>
+    private static string ExtractContentJson(JsonNode msgNode)
+    {
+        var obj = msgNode.AsObject();
+        if (obj["content"] is JsonArray contentArray)
+        {
+            // Anthropic-style: { "role": ..., "content": [...] }
+            return contentArray.ToJsonString();
+        }
+        if (obj["content"] is JsonValue contentValue)
+        {
+            // OpenAI-style string content: { "role": ..., "content": "text" }
+            return $"[{new JsonObject { ["type"] = "text", ["text"] = contentValue.GetValue<string>() }.ToJsonString()}]";
+        }
+        if (obj["content"] is null)
+        {
+            // OpenAI-style with tool_calls but no text content
+            return "[]";
+        }
+        // Fallback: serialize the whole content node
+        return obj["content"]!.ToJsonString();
     }
 
     private void CaptureDelegation(string toolName, IReadOnlyDictionary<string, object?> args, string result)

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using DevMX.Core;
 using DevMX.Core.Persistence;
 using DevMX.Core.Providers;
@@ -56,14 +57,14 @@ bool titled = false; // whether current conversation has been titled
 AgenticLoop? loop = null;
 
 // ── Helper: build loop ────────────────────────────────────────────────────────
-AgenticLoop BuildLoop(List<ChatMessage>? history = null)
+AgenticLoop BuildLoop(List<JsonNode>? history = null)
 {
     if (history is null)
         return new AgenticLoop(CreateLlm(), mcp, store, conversationId, systemPrompt);
     return new AgenticLoop(CreateLlm(), mcp, store, conversationId, systemPrompt, 50, history);
 }
 
-AnthropicClient CreateLlm()
+IChatProvider CreateLlm()
 {
     string key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
     if (string.IsNullOrEmpty(key))
