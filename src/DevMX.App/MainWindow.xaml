@@ -338,10 +338,27 @@
                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.Theme}" Value="light"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                   </Button>
                 </StackPanel>
-              </StackPanel>
+               </StackPanel>
 
-              <!-- Read-only info -->
-              <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
+               <!-- Tool access selector -->
+               <StackPanel Margin="0,4">
+                 <TextBlock Text="Tool access" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                   <Button Content="Auto" FontSize="11" Padding="10,3" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="auto">
+                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="auto"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                   </Button>
+                   <Button Content="Full" FontSize="11" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="full">
+                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="full"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                   </Button>
+                   <Button Content="Restricted" FontSize="11" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="restricted">
+                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="restricted"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
+                   </Button>
+                 </StackPanel>
+                 <TextBlock Text="applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="0,2,0,0"/>
+               </StackPanel>
+
+               <!-- Read-only info -->
+               <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
                 <StackPanel>
                   <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}">
                     <Run Text="MCP Server:" FontWeight="SemiBold"/>

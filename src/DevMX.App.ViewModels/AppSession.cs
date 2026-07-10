@@ -19,7 +19,9 @@ public sealed class AppSession : IAsyncDisposable
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevMX", "devmx.db");
 
     /// <summary>System prompt shown to the LLM — mirrors the REPL constant.</summary>
-    public string SystemPrompt { get; }
+    public string SystemPrompt => _systemPromptValue ?? DefaultSystemPrompt;
+
+    private static string DefaultSystemPrompt => "You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
 
     private DevMxMcpClient? _mcp;
     private ConversationStore? _store;
@@ -30,6 +32,9 @@ public sealed class AppSession : IAsyncDisposable
     public string? Model { get; private set; }
     public long ConversationId { get; private set; }
     public int ToolCount { get; private set; }
+    public string EffectiveToolProfile { get; private set; } = DevMX.Core.ToolProfiles.Full;
+
+    private string? _systemPromptValue;
 
     /// <summary>Exposes the conversation store for sidebar operations.</summary>
     public ConversationStore? Store => _store;
@@ -41,7 +46,64 @@ public sealed class AppSession : IAsyncDisposable
     public AppSession(DevMxSettings settings)
     {
         _settings = settings;
-        SystemPrompt = $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {settings.WorkDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
+    }
+
+    /// <summary>
+    /// Resolves the effective tool profile from the settings.
+    /// "auto" → "full" for loopback endpoints, "restricted" for remote.
+    /// </summary>
+    private static string ResolveEffectiveToolProfile(string toolProfile, string endpoint, string provider)
+    {
+        if (toolProfile != DevMX.Core.ToolProfiles.Auto)
+        {
+            return toolProfile;
+        }
+
+        // Auto mode: loopback → full, remote → restricted
+        // Anthropic is always remote
+        if (provider == "anthropic")
+        {
+            return DevMX.Core.ToolProfiles.Restricted;
+        }
+
+        // Check if endpoint is loopback
+        if (IsLoopbackEndpoint(endpoint))
+        {
+            return DevMX.Core.ToolProfiles.Full;
+        }
+
+        return DevMX.Core.ToolProfiles.Restricted;
+    }
+
+    private static bool IsLoopbackEndpoint(string endpoint)
+    {
+        if (string.IsNullOrEmpty(endpoint))
+            return false;
+
+        try
+        {
+            var uri = new UriBuilder(endpoint);
+            var host = uri.Host.ToLowerInvariant();
+            return host == "localhost" || host == "127.0.0.1" || host == "[::1]" || host == "::1";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Builds the system prompt for the given tool profile.
+    /// Restricted profile removes direct-edit guidance and adds delegation instruction.
+    /// </summary>
+    private static string BuildSystemPrompt(string workDir, string effectiveProfile)
+    {
+        if (effectiveProfile == DevMX.Core.ToolProfiles.Restricted)
+        {
+            return $"You are DevMX, a developer assistant. You have read-only and delegation tools only. For ANY file modification, write a precise brief and delegate via devmind_task_start; review with diff_file and run_build. Working directory: {workDir}. Be concise and precise.";
+        }
+
+        return $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
     }
 
     /// <summary>
@@ -114,18 +176,24 @@ public sealed class AppSession : IAsyncDisposable
             Model = model;
         }
 
-        // 4. Create provider
+        // 4. Resolve effective tool profile & build system prompt
+        var effectiveProfile = ResolveEffectiveToolProfile(_settings.ToolProfile, endpoint, provider);
+        EffectiveToolProfile = effectiveProfile;
+        _systemPromptValue = BuildSystemPrompt(workDir, effectiveProfile);
+        Console.WriteLine($"[AppSession] Tool profile: {effectiveProfile}");
+
+        // 5. Create provider
         _provider = CreateProvider(provider, endpoint, model!);
 
-        // 5. Create initial conversation
+        // 6. Create initial conversation
         ConversationId = await _store.CreateConversationAsync(provider, model!, workDir, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}");
         Console.WriteLine($"[AppSession] Created conversation #{ConversationId}");
 
-        // 6. Create initial AgenticLoop
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt);
+        // 7. Create initial AgenticLoop with tool profile
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, effectiveProfile);
 
         IsInitialized = true;
-        Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model} | provider={provider}");
+        Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model} | provider={provider} | profile={effectiveProfile}");
     }
 
     private static IChatProvider CreateProvider(string provider, string endpoint, string model)
@@ -150,7 +218,7 @@ public sealed class AppSession : IAsyncDisposable
 
         ConversationId = conversationId;
         var history = await AgenticLoop.LoadHistoryAsync(_store, conversationId);
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history);
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history, EffectiveToolProfile);
         Console.WriteLine($"[AppSession] Opened conversation #{conversationId} ({history.Count} messages)");
     }
 

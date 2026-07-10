@@ -21,6 +21,7 @@ public sealed class AgenticLoop
     private readonly string? _systemPrompt;
     private readonly int _maxIterations;
     private readonly List<JsonNode> _history;
+    private readonly string _toolProfile;
 
     /// <summary>
     /// Creates a new AgenticLoop starting with an empty conversation history.
@@ -31,8 +32,9 @@ public sealed class AgenticLoop
         ConversationStore store,
         long conversationId,
         string? systemPrompt = null,
-        int maxIterations = 50)
-        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>())
+        int maxIterations = 50,
+        string toolProfile = ToolProfiles.Full)
+        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>(), toolProfile)
     {
     }
 
@@ -46,7 +48,8 @@ public sealed class AgenticLoop
         long conversationId,
         string? systemPrompt,
         int maxIterations,
-        List<JsonNode> history)
+        List<JsonNode> history,
+        string toolProfile = ToolProfiles.Full)
     {
         _llm = llm;
         _tools = tools;
@@ -55,6 +58,7 @@ public sealed class AgenticLoop
         _systemPrompt = systemPrompt;
         _maxIterations = maxIterations;
         _history = history;
+        _toolProfile = toolProfile;
     }
 
     /// <summary>
@@ -96,8 +100,9 @@ public sealed class AgenticLoop
         var userContentJson = ExtractContentJson(userMsg);
         await _store.AppendMessageAsync(_conversationId, "user", userContentJson);
 
-        // Fetch tool definitions once per turn.
-        var toolDefs = await _tools.ListToolDefinitionsAsync(ct);
+        // Fetch tool definitions once per turn, then apply profile filter.
+        var rawToolDefs = await _tools.ListToolDefinitionsAsync(ct);
+        var toolDefs = ToolProfiles.Filter(rawToolDefs, _toolProfile);
 
         // 2. Main loop.
         for (int i = 0; i < _maxIterations; i++)
@@ -126,7 +131,18 @@ public sealed class AgenticLoop
             foreach (var call in response.ToolCalls)
             {
                 var args = ConvertToJsonDictionary(call.Input);
-                var result = await _tools.CallToolAsync(call.Name, args, ct);
+
+                // Defense-in-depth: deny execution of tools not in the active profile.
+                string result;
+                if (!ToolProfiles.IsToolAllowed(call.Name, _toolProfile))
+                {
+                    result = ToolProfiles.DenyMessage(call.Name);
+                }
+                else
+                {
+                    result = await _tools.CallToolAsync(call.Name, args, ct);
+                }
+
                 onToolCall(call.Name, call.Input.ToJsonString());
                 onToolResult?.Invoke(call.Name, call.Input.ToJsonString(), result);
                 callResults.Add((call, result));

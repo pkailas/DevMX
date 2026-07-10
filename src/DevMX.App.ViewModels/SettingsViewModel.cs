@@ -28,6 +28,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string theme;
 
+    [ObservableProperty]
+    private string toolProfile;
+
     public string ServerExe => _settings.ServerExe;
     public string ApiKeySource => _settings.Provider == "anthropic"
         ? "ANTHROPIC_API_KEY (environment variable)"
@@ -35,6 +38,9 @@ public partial class SettingsViewModel : ObservableObject
 
     /// <summary>Available theme options for the ComboBox.</summary>
     public IEnumerable<string> ThemeOptions => new[] { "dark", "light" };
+
+    /// <summary>Available tool profile options.</summary>
+    public IEnumerable<string> ToolProfileOptions => new[] { "auto", "full", "restricted" };
 
     /// <summary>Creates a SettingsViewModel backed by the given settings instance.</summary>
     /// <param name="settings">The DevMxSettings to edit.</param>
@@ -50,6 +56,7 @@ public partial class SettingsViewModel : ObservableObject
         Provider = settings.Provider;
         WorkDir = settings.WorkDir;
         Theme = settings.Theme;
+        ToolProfile = settings.ToolProfile;
     }
 
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
@@ -67,6 +74,15 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void SetTheme(string themeName) => Theme = themeName;
 
+    [RelayCommand]
+    private void SetToolProfile(string profileName)
+    {
+        ToolProfile = profileName;
+        // Persist immediately
+        _settings.ToolProfile = ToolProfile;
+        _settings.Save();
+    }
+
     [RelayCommand(CanExecute = nameof(CanApply))]
     private void Apply()
     {
@@ -76,6 +92,7 @@ public partial class SettingsViewModel : ObservableObject
         _settings.Provider = Provider;
         _settings.WorkDir = WorkDir;
         _settings.Theme = Theme;
+        _settings.ToolProfile = ToolProfile;
         _settings.Save();
         _onApply();
     }

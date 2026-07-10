@@ -147,4 +147,162 @@ public class DevMxSettingsTests
         var options = vm.ThemeOptions.ToList();
         Assert.Equal(new[] { "dark", "light" }, options);
     }
+
+    [Fact]
+    public void Settings_DefaultToolProfile_IsAuto()
+    {
+        var settings = new DevMxSettings();
+        Assert.Equal("auto", settings.ToolProfile);
+    }
+
+    [Fact]
+    public void SettingsViewModel_ToolProfile_RoundTrip()
+    {
+        var settings = new DevMxSettings { ToolProfile = "restricted" };
+        var vm = new SettingsViewModel(settings, () => { });
+
+        Assert.Equal("restricted", vm.ToolProfile);
+
+        // Change via command
+        vm.SetToolProfileCommand.Execute("full");
+        Assert.Equal("full", vm.ToolProfile);
+        Assert.Equal("full", settings.ToolProfile); // persisted immediately
+    }
+
+    [Fact]
+    public void SettingsViewModel_ToolProfileOptions_ReturnsAutoFullRestricted()
+    {
+        var settings = new DevMxSettings();
+        var vm = new SettingsViewModel(settings, () => { });
+
+        var options = vm.ToolProfileOptions.ToList();
+        Assert.Equal(new[] { "auto", "full", "restricted" }, options);
+    }
+
+    [Fact]
+    public void Settings_RoundTripPreservesToolProfile()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), $"devmx_settings_test_{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+
+            var original = new DevMxSettings
+            {
+                Endpoint = "http://myserver:9000/v1",
+                Model = "gpt-4o-mini",
+                Provider = "anthropic",
+                WorkDir = @"C:\my\work",
+                ServerExe = @"C:\custom\server.exe",
+                Theme = "light",
+                ToolProfile = "restricted"
+            };
+
+            string tempPath = Path.Combine(tempDir, "settings.json");
+            var json = System.Text.Json.JsonSerializer.Serialize(original, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+            File.WriteAllText(tempPath, json);
+
+            var loaded = System.Text.Json.JsonSerializer.Deserialize<DevMxSettings>(File.ReadAllText(tempPath), new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+            Assert.NotNull(loaded);
+            Assert.Equal("restricted", loaded.ToolProfile);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void AppSession_AutoResolution_LoopbackEndpoint_ReturnsFull()
+    {
+        // Test via reflection since ResolveEffectiveToolProfile is private static
+        var method = typeof(AppSession).GetMethod("ResolveEffectiveToolProfile",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method.Invoke(null, new object[] { "auto", "http://127.0.0.1:8080/v1", "openai" });
+        Assert.Equal("full", result);
+    }
+
+    [Fact]
+    public void AppSession_AutoResolution_RemoteEndpoint_ReturnsRestricted()
+    {
+        var method = typeof(AppSession).GetMethod("ResolveEffectiveToolProfile",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method.Invoke(null, new object[] { "auto", "https://api.openai.com/v1", "openai" });
+        Assert.Equal("restricted", result);
+    }
+
+    [Fact]
+    public void AppSession_AutoResolution_Anthropic_ReturnsRestricted()
+    {
+        var method = typeof(AppSession).GetMethod("ResolveEffectiveToolProfile",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method.Invoke(null, new object[] { "auto", "http://127.0.0.1:8080/v1", "anthropic" });
+        Assert.Equal("restricted", result);
+    }
+
+    [Fact]
+    public void AppSession_AutoResolution_Localhost_ReturnsFull()
+    {
+        var method = typeof(AppSession).GetMethod("ResolveEffectiveToolProfile",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method.Invoke(null, new object[] { "auto", "http://localhost:8080/v1", "openai" });
+        Assert.Equal("full", result);
+    }
+
+    [Fact]
+    public void AppSession_AutoResolution_ExplicitProfile_ReturnsAsIs()
+    {
+        var method = typeof(AppSession).GetMethod("ResolveEffectiveToolProfile",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // Explicit "full" stays full even for remote
+        var result = method.Invoke(null, new object[] { "full", "https://api.openai.com/v1", "openai" });
+        Assert.Equal("full", result);
+
+        // Explicit "restricted" stays restricted even for loopback
+        var result2 = method.Invoke(null, new object[] { "restricted", "http://127.0.0.1:8080/v1", "openai" });
+        Assert.Equal("restricted", result2);
+    }
+
+    [Fact]
+    public void AppSession_SystemPrompt_RestrictedContainsDelegationHint()
+    {
+        var method = typeof(AppSession).GetMethod("BuildSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = (string)method.Invoke(null, new object[] { "/work", "restricted" })!;
+        Assert.True(result.Contains("devmind_task_start"), $"Expected 'devmind_task_start' in: {result}");
+        Assert.True(result.Contains("read-only"), $"Expected 'read-only' in: {result}");
+        Assert.False(result.Contains("make small judgment edits directly"), $"Did not expect 'make small judgment edits directly' in: {result}");
+    }
+
+    [Fact]
+    public void AppSession_SystemPrompt_FullContainsStandardPrompt()
+    {
+        var method = typeof(AppSession).GetMethod("BuildSystemPrompt",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = (string)method.Invoke(null, new object[] { "/work", "full" })!;
+        Assert.True(result.Contains("read, write, and analyze"), $"Expected 'read, write, and analyze' in: {result}");
+        Assert.False(result.Contains("read-only"), $"Did not expect 'read-only' in: {result}");
+    }
 }

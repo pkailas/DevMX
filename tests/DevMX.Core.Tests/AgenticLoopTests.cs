@@ -347,4 +347,97 @@ public class AgenticLoopTests : IDisposable
         Assert.Equal("FILE CONTENT FROM EXECUTOR", toolResults[0].Result);
         Assert.Contains("path", toolResults[0].Args);
     }
+
+    // --- Test 8: Restricted profile denies excluded tool execution ---
+    [Fact]
+    public async Task RestrictedProfile_DeniesExcludedTool()
+    {
+        // Arrange — executor exposes both read_file and patch_file
+        var executor = new FakeToolExecutorWithPatchFile();
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "patch_file", new JsonObject { ["filename"] = "x.cs" }),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+        var handler = new StubHttpHandler(toolUseResponse, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var loop = new AgenticLoop(client, executor, store, convId, null, 50, ToolProfiles.Restricted);
+
+        var toolResults = new List<(string Name, string Args, string Result)>();
+
+        // Act
+        await loop.RunTurnAsync("Patch file",
+            _ => { },
+            (_, _) => { },
+            default,
+            (name, args, result) => toolResults.Add((name, args, result)));
+
+        // Assert — patch_file was denied, executor CallToolAsync NOT called for it
+        Assert.Single(toolResults);
+        Assert.Equal("patch_file", toolResults[0].Name);
+        Assert.Contains("[denied]", toolResults[0].Result);
+        Assert.Contains("patch_file", toolResults[0].Result);
+        Assert.Contains("devmind_task_start", toolResults[0].Result);
+        // Executor should not have been called for patch_file
+        Assert.Empty(executor.Calls);
+    }
+
+    // --- Test 9: Restricted profile allows allowlisted tool execution ---
+    [Fact]
+    public async Task RestrictedProfile_AllowsAllowlistedTool()
+    {
+        // Arrange
+        var executor = new FakeToolExecutor
+        {
+            ToolResults = { ["read_file"] = "ALLOWED CONTENT" }
+        };
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "read_file", new JsonObject { ["filename"] = "x.cs" }),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+        var handler = new StubHttpHandler(toolUseResponse, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var loop = new AgenticLoop(client, executor, store, convId, null, 50, ToolProfiles.Restricted);
+
+        var toolResults = new List<(string Name, string Args, string Result)>();
+
+        // Act
+        await loop.RunTurnAsync("Read file",
+            _ => { },
+            (_, _) => { },
+            default,
+            (name, args, result) => toolResults.Add((name, args, result)));
+
+        // Assert — read_file was allowed
+        Assert.Single(toolResults);
+        Assert.Equal("read_file", toolResults[0].Name);
+        Assert.Equal("ALLOWED CONTENT", toolResults[0].Result);
+        Assert.Single(executor.Calls);
+    }
+
+    // Fake executor that exposes patch_file in tool definitions
+    private sealed class FakeToolExecutorWithPatchFile : IMcpToolExecutor
+    {
+        public List<(string Name, IReadOnlyDictionary<string, object?> Args)> Calls { get; } = new();
+
+        public Task<IReadOnlyList<ToolDefinition>> ListToolDefinitionsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ToolDefinition>>(new List<ToolDefinition>
+            {
+                new("read_file", "Read a file", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }),
+                new("patch_file", "Patch a file", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() })
+            });
+        }
+
+        public Task<string> CallToolAsync(string name, IReadOnlyDictionary<string, object?> args, CancellationToken ct = default)
+        {
+            Calls.Add((name, args));
+            return Task.FromResult("EXECUTED");
+        }
+    }
 }

@@ -131,7 +131,7 @@ public partial class MainViewModel : ObservableObject
 
             _dispatch(() =>
             {
-                StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model}";
+                StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
                 Chat.SetInitialized(true);
                 IsBusy = false;
             });
@@ -206,6 +206,7 @@ public partial class MainViewModel : ObservableObject
         _settings.Provider = freshSettings.Provider;
         _settings.WorkDir = freshSettings.WorkDir;
         _settings.ServerExe = freshSettings.ServerExe;
+        _settings.ToolProfile = freshSettings.ToolProfile;
 
         // Teardown
         _dispatch(() =>
@@ -311,7 +312,7 @@ public partial class MainViewModel : ObservableObject
 
         _dispatch(() =>
         {
-            StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model}";
+            StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
             Chat.SetInitialized(true);
             IsBusy = false;
         });
