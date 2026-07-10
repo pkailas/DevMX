@@ -6,6 +6,10 @@ namespace DevMX.App.ViewModels;
 
 public partial class ChatViewModel : ObservableObject
 {
+    private readonly AppSession _session;
+    private readonly Action<Action> _dispatch;
+    private Func<string, Task>? _onTurnComplete;
+
     [ObservableProperty]
     private ObservableCollection<ChatEntryViewModel> entries;
 
@@ -15,23 +19,100 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     private bool isBusy;
 
-    public ChatViewModel()
+    [ObservableProperty]
+    private bool isInitialized;
+
+    public ChatViewModel(AppSession session, Action<Action> dispatch)
     {
-        Entries = new ObservableCollection<ChatEntryViewModel>(new[]
-        {
-            new ChatEntryViewModel(ChatEntryKind.User, "read Program.cs and summarize"),
-            new ChatEntryViewModel(ChatEntryKind.Tool, "[tool] read_file(Program.cs)"),
-            new ChatEntryViewModel(ChatEntryKind.Assistant, "This project is a C# solution containing a core library (DevMX.Core) with an agentic loop, MCP client, and chat provider implementations for Anthropic and OpenAI-compatible endpoints."),
-        });
+        _session = session;
+        _dispatch = dispatch;
+        Entries = new ObservableCollection<ChatEntryViewModel>();
     }
 
-    [RelayCommand]
-    private void Send()
+    internal void SetAutoTitleCallback(Func<string, Task> callback)
     {
-        if (string.IsNullOrWhiteSpace(InputText))
+        _onTurnComplete = callback;
+    }
+
+    internal void SetInitialized(bool value)
+    {
+        IsInitialized = value;
+    }
+
+    internal void ClearEntries()
+    {
+        Entries.Clear();
+    }
+
+    private bool CanSend()
+    {
+        return !IsBusy && IsInitialized && !string.IsNullOrWhiteSpace(InputText);
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSend))]
+    private async Task SendAsync()
+    {
+        var text = InputText.Trim();
+        if (string.IsNullOrWhiteSpace(text) || IsBusy || !IsInitialized)
             return;
 
-        Entries.Add(new ChatEntryViewModel(ChatEntryKind.User, InputText));
-        InputText = string.Empty;
+        _dispatch(() =>
+        {
+            Entries.Add(new ChatEntryViewModel(ChatEntryKind.User, text));
+            InputText = string.Empty;
+            IsBusy = true;
+            SendCommand.NotifyCanExecuteChanged();
+        });
+
+        try
+        {
+            await _session.StartTurnAsync(
+                text,
+                onAssistantText: (chunk) =>
+                {
+                    _dispatch(() =>
+                    {
+                        // Append to the last assistant entry, or create one
+                        if (Entries.Count > 0 && Entries[^1].Kind == ChatEntryKind.Assistant)
+                        {
+                            Entries[^1].Text += chunk;
+                        }
+                        else
+                        {
+                            Entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, chunk));
+                        }
+                    });
+                },
+                onToolCall: (name, argJson) =>
+                {
+                    string argTrunc = argJson.Length > 120 ? argJson[..120] + "\u2026" : argJson;
+                    _dispatch(() =>
+                    {
+                        Entries.Add(new ChatEntryViewModel(ChatEntryKind.Tool, $"[tool] {name}({argTrunc})"));
+                    });
+                },
+                CancellationToken.None);
+
+            // Notify caller of successful turn completion (for auto-title, etc.)
+            if (_onTurnComplete != null)
+            {
+                await _onTurnComplete(text);
+            }
+        }
+        catch (Exception ex)
+        {
+            _dispatch(() =>
+            {
+                Entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, $"[error] {ex.Message}"));
+            });
+        }
+        finally
+        {
+            _dispatch(() =>
+            {
+                IsBusy = false;
+                SendCommand.NotifyCanExecuteChanged();
+            });
+        }
     }
 }

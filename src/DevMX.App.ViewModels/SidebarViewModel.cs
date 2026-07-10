@@ -6,30 +6,79 @@ namespace DevMX.App.ViewModels;
 
 public partial class SidebarViewModel : ObservableObject
 {
+    private readonly AppSession _session;
+    private readonly Action<Action> _dispatch;
+    private readonly Action _clearChatEntries;
+    private bool _isTitled;
+
     [ObservableProperty]
     private ObservableCollection<ConversationItemViewModel> conversations;
 
     [ObservableProperty]
     private ConversationItemViewModel? selectedConversation;
 
-    public SidebarViewModel()
+    public SidebarViewModel(AppSession session, Action<Action> dispatch, Action clearChatEntries)
     {
-        var now = DateTime.UtcNow;
-        Conversations = new ObservableCollection<ConversationItemViewModel>(new[]
-        {
-            new ConversationItemViewModel("conv-1", "sample: refactor Parsely", now.AddMinutes(-10)),
-            new ConversationItemViewModel("conv-2", "sample: fix tests", now.AddMinutes(-5)),
-            new ConversationItemViewModel("conv-3", "(untitled)", now),
-        });
-        SelectedConversation = Conversations[0];
+        _session = session;
+        _dispatch = dispatch;
+        _clearChatEntries = clearChatEntries;
+        Conversations = new ObservableCollection<ConversationItemViewModel>();
+        _isTitled = false;
+    }
+
+    internal void AddConversation(long id, string title, DateTime updatedAt)
+    {
+        var item = new ConversationItemViewModel(id, title, updatedAt);
+        Conversations.Add(item);
+        SelectedConversation = item;
     }
 
     [RelayCommand]
-    private void NewConversation()
+    private async Task NewConversationAsync()
     {
-        var id = $"conv-{Guid.NewGuid():N[..8]}";
-        var item = new ConversationItemViewModel(id, "(untitled)", DateTime.UtcNow);
-        Conversations.Add(item);
-        SelectedConversation = item;
+        try
+        {
+            long newId = await _session.CreateNewConversationAsync();
+            _dispatch(() =>
+            {
+                var item = new ConversationItemViewModel(newId, "(untitled)", DateTime.UtcNow);
+                Conversations.Add(item);
+                SelectedConversation = item;
+                _clearChatEntries();
+                _isTitled = false;
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SidebarViewModel] NewConversation failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Called after the first turn to auto-title the conversation.</summary>
+    internal async Task AutoTitleAsync(string firstUserMessage)
+    {
+        if (_isTitled)
+            return;
+
+        string autoTitle = firstUserMessage.Length > 48 ? firstUserMessage[..48].Trim() + "\u2026" : firstUserMessage.Trim();
+        if (string.IsNullOrEmpty(autoTitle))
+            return;
+
+        try
+        {
+            await _session.UpdateTitleAsync(autoTitle);
+            _dispatch(() =>
+            {
+                if (SelectedConversation != null)
+                {
+                    SelectedConversation.Title = autoTitle;
+                }
+                _isTitled = true;
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SidebarViewModel] AutoTitle failed: {ex.Message}");
+        }
     }
 }

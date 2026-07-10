@@ -15,4 +15,10 @@ public partial class ChatEntryViewModel : ObservableObject
         Kind = kind;
         Text = text;
     }
+
+    /// <summary>Appends text to the current content (used for streaming assistant responses).</summary>
+    public void AppendText(string chunk)
+    {
+        Text += chunk;
+    }
 }

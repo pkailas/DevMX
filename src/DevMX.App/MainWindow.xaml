@@ -66,6 +66,10 @@
 
   <!-- Outer Grid: rail | content -->
   <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="Auto"/>
       <ColumnDefinition Width="*"/>
@@ -293,9 +297,10 @@
                    Foreground="{StaticResource DimBrush}" Padding="10,8"/>
 
         <!-- Chat entries -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="ChatScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
-                      Padding="8">
+                      Padding="8"
+                      Loaded="ChatScrollViewer_OnLoaded">
           <ItemsControl ItemsSource="{Binding Chat.Entries}"/>
         </ScrollViewer>
 
@@ -323,6 +328,12 @@
         </Grid>
           </Grid>
         </Border>
-      </Grid>
+       </Grid>
+
+        <!-- Status bar (spans both columns) -->
+        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="24">
+          <TextBlock Text="{Binding StatusText}" FontSize="11"
+                     Foreground="{StaticResource DimBrush}" Padding="8,2"/>
+        </StatusBar>
     </Grid>
 </Window>

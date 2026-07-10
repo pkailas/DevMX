@@ -5,7 +5,7 @@ namespace DevMX.App.ViewModels;
 public partial class ConversationItemViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string id = string.Empty;
+    private long id;
 
     [ObservableProperty]
     private string title = string.Empty;
@@ -13,7 +13,7 @@ public partial class ConversationItemViewModel : ObservableObject
     [ObservableProperty]
     private DateTime updatedAt;
 
-    public ConversationItemViewModel(string id, string title, DateTime updatedAt)
+    public ConversationItemViewModel(long id, string title, DateTime updatedAt)
     {
         Id = id;
         Title = title;

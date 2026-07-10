@@ -1,6 +1,9 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using DevMX.App.ViewModels;
 
 namespace DevMX.App;
@@ -11,14 +14,40 @@ namespace DevMX.App;
 public partial class MainWindow : Window
 {
     private MainViewModel Vm => (MainViewModel)DataContext!;
+    private readonly AppSession _session;
 
     public MainWindow()
     {
         InitializeComponent();
-        DataContext = new MainViewModel();
 
-        ((INotifyPropertyChanged)Vm).PropertyChanged += OnViewModelPropertyChanged;
+        // Composition root: create AppSession and dispatch delegate
+        _session = new AppSession();
+        Action<Action> dispatch = (action) => Dispatcher.Invoke(action);
+
+        var vm = new MainViewModel(_session, dispatch);
+        DataContext = vm;
+
+        ((INotifyPropertyChanged)vm).PropertyChanged += OnViewModelPropertyChanged;
         UpdateRailVisibility();
+
+        // Kick off async initialization (fire-and-forget with status updates)
+        _ = vm.InitializeAsync();
+
+        // Hook window close for cleanup
+        Closing += OnWindowClosing;
+    }
+
+    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        // Block briefly to dispose the session cleanly
+        try
+        {
+            Vm.DisposeSessionAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainWindow] Dispose error on close: {ex.Message}");
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -52,6 +81,24 @@ public partial class MainWindow : Window
         {
             Vm.Chat.SendCommand?.Execute(null);
             e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Auto-scroll the chat ScrollViewer to the bottom when entries are added.
+    /// </summary>
+    private void ChatScrollViewer_OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ScrollViewer sv)
+        {
+            // Subscribe to entry collection changes for auto-scroll
+            INotifyCollectionChanged entries = Vm.Chat.Entries;
+            entries.CollectionChanged += (s, args) =>
+            {
+                Dispatcher.BeginInvoke(new Action(() => sv.ScrollToBottom()), DispatcherPriority.Background);
+            };
+
+            sv.ScrollToBottom();
         }
     }
 }
