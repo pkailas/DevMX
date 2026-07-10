@@ -2,6 +2,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
+using System.Threading;
+using DevMX.Core.Persistence;
 
 namespace DevMX.App.ViewModels;
 
@@ -12,11 +14,21 @@ public partial class SidebarViewModel : ObservableObject
     private readonly Action _clearChatEntries;
     private bool _isTitled;
 
+    // Search state
+    private CancellationTokenSource? _searchCts;
+    private ObservableCollection<ConversationItemViewModel>? _fullList; // cached full list for restoring after search clear
+
     [ObservableProperty]
     private ObservableCollection<ConversationItemViewModel> conversations;
 
     [ObservableProperty]
     private ConversationItemViewModel? selectedConversation;
+
+    [ObservableProperty]
+    private string searchText = string.Empty;
+
+    /// <summary>True when SearchText is non-empty (for clear button visibility).</summary>
+    public bool HasSearchText => !string.IsNullOrWhiteSpace(SearchText);
 
     public SidebarViewModel(AppSession session, Action<Action> dispatch, Action clearChatEntries)
     {
@@ -41,10 +53,57 @@ public partial class SidebarViewModel : ObservableObject
 
         _dispatch(() =>
         {
+            _fullList = items;
             Conversations = items;
             var current = Conversations.FirstOrDefault(c => c.Id == currentConversationId);
             SelectedConversation = current;
         });
+    }
+
+    /// <summary>Search conversations with debounce (300ms).</summary>
+    partial void OnSearchTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasSearchText));
+        // Cancel any pending search
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(300, token);
+                if (token.IsCancellationRequested) return;
+
+                string trimmed = value.Trim();
+                if (string.IsNullOrEmpty(trimmed))
+                {
+                    // Restore full list
+                    _dispatch(() =>
+                    {
+                        if (_fullList != null)
+                            Conversations = _fullList;
+                    });
+                }
+                else
+                {
+                    var results = await _session.Store!.SearchConversationsAsync(trimmed);
+                    var items = new ObservableCollection<ConversationItemViewModel>();
+                    foreach (var summary in results)
+                    {
+                        var updatedAt = DateTime.TryParse(summary.UpdatedAt, out var dt) ? dt : DateTime.UtcNow;
+                        items.Add(new ConversationItemViewModel(summary.Id, summary.Title, updatedAt));
+                    }
+                    _dispatch(() => Conversations = items);
+                }
+            }
+            catch (OperationCanceledException) { /* ignored */ }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SidebarViewModel] Search failed: {ex.Message}");
+            }
+        }, token);
     }
 
     /// <summary>Called when a conversation is selected in the ListBox — switch to it.</summary>
@@ -227,6 +286,7 @@ public partial class SidebarViewModel : ObservableObject
             {
                 var item = new ConversationItemViewModel(newId, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}", DateTime.UtcNow);
                 Conversations.Insert(0, item);
+                _fullList?.Insert(0, item);
                 SelectedConversation = item;
                 _clearChatEntries();
                 _isTitled = false;
@@ -255,6 +315,7 @@ public partial class SidebarViewModel : ObservableObject
             _dispatch(() =>
             {
                 Conversations.Remove(item);
+                _fullList?.Remove(item);
 
                 if (wasOpen)
                 {
@@ -306,5 +367,52 @@ public partial class SidebarViewModel : ObservableObject
     internal async Task RefreshListAsync(long currentConversationId)
     {
         await PopulateConversationsAsync(currentConversationId);
+    }
+
+    /// <summary>Begin editing a conversation's title.</summary>
+    [RelayCommand]
+    private void BeginRename(ConversationItemViewModel item)
+    {
+        item.EditText = item.Title;
+        item.IsEditing = true;
+    }
+
+    /// <summary>Commit the renamed title.</summary>
+    [RelayCommand]
+    private async Task CommitRenameAsync(ConversationItemViewModel item)
+    {
+        string trimmed = item.EditText.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            // Empty → cancel
+            item.IsEditing = false;
+            return;
+        }
+
+        try
+        {
+            await _session.Store!.UpdateTitleAsync(item.Id, trimmed);
+            _dispatch(() =>
+            {
+                item.Title = trimmed;
+                item.IsEditing = false;
+
+                // If this is the current conversation, mark it titled so auto-rename won't clobber
+                if (item.Id == _session.ConversationId)
+                    _isTitled = true;
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[SidebarViewModel] CommitRename failed: {ex.Message}");
+            item.IsEditing = false;
+        }
+    }
+
+    /// <summary>Cancel renaming and restore the original title.</summary>
+    [RelayCommand]
+    private void CancelRename(ConversationItemViewModel item)
+    {
+        item.IsEditing = false;
     }
 }

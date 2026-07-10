@@ -134,4 +134,36 @@ public partial class MainWindow : Window
             await Vm.Sidebar.SelectConversationAsync(item);
         }
     }
+
+    /// <summary>
+    /// Double-click on a conversation title begins rename.
+    /// </summary>
+    private void ConversationTitle_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount >= 2 && sender is TextBlock tb && tb.DataContext is ConversationItemViewModel item)
+        {
+            Vm.Sidebar.BeginRenameCommand.Execute(item);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// LostFocus on the title edit box commits the rename.
+    /// </summary>
+    private void TitleEdit_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb && tb.DataContext is ConversationItemViewModel item)
+        {
+            _ = Vm.Sidebar.CommitRenameCommand.ExecuteAsync(item);
+        }
+    }
+
+    /// <summary>
+    /// Clear the search text when the × button is clicked.
+    /// </summary>
+    private void SearchClearBtn_Click(object sender, RoutedEventArgs e)
+    {
+        Vm.Sidebar.SearchText = string.Empty;
+        SearchTextBox?.Focus();
+    }
 }

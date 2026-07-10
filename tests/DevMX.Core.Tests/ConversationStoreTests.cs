@@ -184,4 +184,77 @@ public class ConversationStoreTests : IDisposable
         Assert.Empty(dels);
         Assert.Empty(list);
     }
+
+    // --- Test 7: SearchConversationsAsync matches by title ---
+    [Fact]
+    public async Task SearchConversations_MatchesByTitle()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        await store.CreateConversationAsync("p", "m", "/w", "Alpha Project");
+        await store.CreateConversationAsync("p", "m", "/w", "Beta Project");
+        await store.CreateConversationAsync("p", "m", "/w", "Gamma Test");
+
+        var results = await store.SearchConversationsAsync("Beta");
+        Assert.Single(results);
+        Assert.Equal("Beta Project", results[0].Title);
+    }
+
+    // --- Test 8: SearchConversationsAsync matches by message content ---
+    [Fact]
+    public async Task SearchConversations_MatchesByMessageContent()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        var convId = await store.CreateConversationAsync("p", "m", "/w", "Untitled");
+        await store.AppendMessageAsync(convId, "user", "[{\"type\":\"text\",\"text\":\"discuss the budget\"}]");
+
+        var results = await store.SearchConversationsAsync("budget");
+        Assert.Single(results);
+        Assert.Equal("Untitled", results[0].Title);
+    }
+
+    // --- Test 9: SearchConversationsAsync returns empty for no match ---
+    [Fact]
+    public async Task SearchConversations_NoMatchReturnsEmpty()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        await store.CreateConversationAsync("p", "m", "/w", "Alpha");
+        await store.CreateConversationAsync("p", "m", "/w", "Beta");
+
+        var results = await store.SearchConversationsAsync("zzznonexistent");
+        Assert.Empty(results);
+    }
+
+    // --- Test 10: SearchConversationsAsync handles special characters (parameterization) ---
+    [Fact]
+    public async Task SearchConversations_ParameterizedSpecialChars()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        var convId = await store.CreateConversationAsync("p", "m", "/w", "Test with % and ' chars");
+        await store.AppendMessageAsync(convId, "user", "[{\"type\":\"text\",\"text\":\"100% done with it's work\"}]");
+
+        // Query with % should not break (it's a literal, not a wildcard)
+        var results1 = await store.SearchConversationsAsync("%");
+        Assert.Single(results1);
+
+        // Query with ' should not break SQL injection
+        var results2 = await store.SearchConversationsAsync("it's");
+        Assert.Single(results2);
+    }
+
+    // --- Test 11: SearchConversationsAsync is case-insensitive ---
+    [Fact]
+    public async Task SearchConversations_CaseInsensitive()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        await store.CreateConversationAsync("p", "m", "/w", "Hello World");
+
+        var results = await store.SearchConversationsAsync("hello");
+        Assert.Single(results);
+        Assert.Equal("Hello World", results[0].Title);
+    }
 }

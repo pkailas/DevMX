@@ -140,6 +140,45 @@
                        Foreground="{DynamicResource DimBrush}" VerticalAlignment="Center"/>
           </StackPanel>
 
+          <!-- Search box -->
+          <Border Margin="8,0,8,4" Background="{DynamicResource InputBackground}"
+                  BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="3">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox Grid.Column="0" x:Name="SearchTextBox"
+                       Text="{Binding Sidebar.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                       Padding="6,3" FontSize="11" BorderThickness="0" Background="Transparent"
+                       VerticalContentAlignment="Center">
+                <TextBox.InputBindings>
+                  <KeyBinding Key="Escape" Command="{Binding Sidebar.CancelRenameCommand}"/>
+                </TextBox.InputBindings>
+              </TextBox>
+              <TextBlock Grid.Column="0" Text="Search conversations…"
+                         FontSize="11" Foreground="{DynamicResource DimBrush}"
+                         Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                        <Setter Property="Visibility" Value="Visible"/>
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <Button Grid.Column="1" x:Name="SearchClearBtn" Content="×" FontSize="10"
+                      Padding="4,2,6,2" Background="Transparent" BorderThickness="0"
+                      Foreground="{DynamicResource DimBrush}" ToolTip="Clear search"
+                      VerticalAlignment="Stretch"
+                      Click="SearchClearBtn_Click"
+                      Visibility="{Binding Sidebar.HasSearchText, Converter={StaticResource BoolVis}}"/>
+            </Grid>
+          </Border>
+
           <!-- Conversation list -->
           <ListBox ItemsSource="{Binding Sidebar.Conversations}"
                    SelectedItem="{Binding Sidebar.SelectedConversation}"
@@ -151,14 +190,79 @@
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <StackPanel Grid.Column="0">
-                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                               FontSize="12" Foreground="{DynamicResource ForegroundBrush}"/>
+                    <!-- Title display -->
+                    <TextBlock x:Name="TitleText"
+                               Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                               FontSize="12" Foreground="{DynamicResource ForegroundBrush}"
+                               MouseDown="ConversationTitle_MouseDown">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                              <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                    <!-- Title edit box -->
+                    <TextBox x:Name="TitleEdit"
+                             Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="12" Foreground="{DynamicResource ForegroundBrush}"
+                             Background="{DynamicResource InputBackground}"
+                             BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
+                             Padding="2,1" LostFocus="TitleEdit_LostFocus">
+                      <TextBox.Style>
+                        <Style TargetType="TextBox">
+                          <Setter Property="Visibility" Value="Collapsed"/>
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                              <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBox.Style>
+                      <TextBox.InputBindings>
+                        <KeyBinding Key="Enter"
+                                    Command="{Binding DataContext.Sidebar.CommitRenameCommand,
+                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}"/>
+                        <KeyBinding Key="Escape"
+                                    Command="{Binding DataContext.Sidebar.CancelRenameCommand,
+                                              RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                    CommandParameter="{Binding}"/>
+                      </TextBox.InputBindings>
+                    </TextBox>
                     <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}"
                                FontSize="10" Foreground="{DynamicResource DimBrush}"/>
                   </StackPanel>
-                  <Button Grid.Column="1" Content="×" FontSize="10" Padding="2,0,4,0"
+                  <!-- Rename pencil button -->
+                  <Button Grid.Column="1" Content="✎" FontSize="10" Padding="2,0,4,0"
+                          Background="Transparent" BorderThickness="0"
+                          Foreground="{DynamicResource DimBrush}"
+                          Command="{Binding DataContext.Sidebar.BeginRenameCommand,
+                                      RelativeSource={RelativeSource AncestorType=ListBox}}"
+                          CommandParameter="{Binding}"
+                          ToolTip="Rename conversation">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                  <!-- Delete button -->
+                  <Button Grid.Column="2" Content="×" FontSize="10" Padding="2,0,4,0"
                           Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource DimBrush}"
                           Command="{Binding DataContext.Sidebar.DeleteConversationCommand,
@@ -171,6 +275,9 @@
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
                             <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed"/>
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>

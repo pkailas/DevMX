@@ -13,6 +13,12 @@ public partial class ConversationItemViewModel : ObservableObject
     [ObservableProperty]
     private DateTime updatedAt;
 
+    [ObservableProperty]
+    private bool isEditing;
+
+    [ObservableProperty]
+    private string editText = string.Empty;
+
     public ConversationItemViewModel(long id, string title, DateTime updatedAt)
     {
         Id = id;

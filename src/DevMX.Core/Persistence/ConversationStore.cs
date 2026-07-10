@@ -257,6 +257,38 @@ public sealed class ConversationStore : IAsyncDisposable
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public async Task<IReadOnlyList<ConversationSummary>> SearchConversationsAsync(string query)
+    {
+        using var conn = CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT DISTINCT c.id, c.title, c.provider, c.model, c.working_dir, c.updated_at
+            FROM conversations c
+            WHERE LOWER(c.title) LIKE LOWER(@query)
+               OR EXISTS (
+                   SELECT 1 FROM messages m
+                   WHERE m.conversation_id = c.id
+                     AND LOWER(m.content_json) LIKE LOWER(@query)
+               )
+            ORDER BY c.updated_at DESC
+            LIMIT 100;";
+        cmd.Parameters.AddWithValue("@query", "%" + query + "%");
+
+        var results = new List<ConversationSummary>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new ConversationSummary(
+                Id: reader.GetInt64(0),
+                Title: reader.GetString(1),
+                Provider: reader.GetString(2),
+                Model: reader.GetString(3),
+                WorkingDir: reader.GetString(4),
+                UpdatedAt: reader.GetString(5)));
+        }
+        return results;
+    }
+
     public async Task<long> RecordDelegationAsync(long conversationId, string jobId, string brief)
     {
         var now = DateTime.UtcNow.ToString("o");
