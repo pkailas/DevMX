@@ -186,7 +186,7 @@ public sealed class AppSession : IAsyncDisposable
         if (_mcp == null)
             throw new InvalidOperationException("AppSession not initialized.");
 
-        var result = await _mcp.CallToolAsync("read_file", new Dictionary<string, object?> { ["path"] = path });
+        var result = await _mcp.CallToolAsync("read_file", new Dictionary<string, object?> { ["filename"] = path });
 
         // Best-effort strip tool-banner prefix lines (e.g. "[READ:...]" or code fences)
         var lines = result.Split('\n');
