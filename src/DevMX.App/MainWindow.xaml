@@ -124,9 +124,11 @@
         </StackPanel>
 
         <!-- Expanded rail (260px wide, sidebar content) -->
-        <StackPanel x:Name="ExpandedRail" Width="260" Visibility="Collapsed"
+        <ScrollViewer x:Name="ExpandedRail" Width="260" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
-                    Background="{DynamicResource PanelBackground}">
+                    Background="{DynamicResource PanelBackground}"
+                    VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
           <!-- Header -->
           <StackPanel Orientation="Horizontal" Margin="10,8,10,4">
             <TextBlock Text="Conversations" FontSize="12" FontWeight="SemiBold"
@@ -355,6 +357,7 @@
             </StackPanel>
           </Border>
         </StackPanel>
+        </ScrollViewer>
 
         <!-- Always-visible thin toggle strip on far left edge -->
         <Button x:Name="ToggleRailBtn" Width="12" HorizontalAlignment="Left"
