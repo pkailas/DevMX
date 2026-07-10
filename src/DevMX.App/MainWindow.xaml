@@ -42,7 +42,7 @@
     </DataTemplate>
 
     <!-- Selector for chat entry kind -->
-    <DataTemplate DataType="vm:ChatEntryViewModel">
+    <DataTemplate DataType="{x:Type vm:ChatEntryViewModel}">
       <ContentControl>
         <ContentControl.Style>
           <Style TargetType="ContentControl">
