@@ -186,27 +186,29 @@ public sealed class AppSession : IAsyncDisposable
         if (_mcp == null)
             throw new InvalidOperationException("AppSession not initialized.");
 
-        var result = await _mcp.CallToolAsync("read_file", new Dictionary<string, object?> { ["filename"] = path });
+        var result = await _mcp.CallToolAsync("read_file",
+            new Dictionary<string, object?> { ["filename"] = path, ["force_full"] = true });
 
-        // Best-effort strip tool-banner prefix lines (e.g. "[READ:...]" or code fences)
+        // DM wraps content as: [READ:name] banner lines, then a ``` fence, content, closing ``` fence.
+        // Extract between the first and last fence when both exist; otherwise strip leading banner lines.
         var lines = result.Split('\n');
+        int firstFence = -1, lastFence = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Trim().StartsWith("```"))
+            {
+                if (firstFence < 0) firstFence = i;
+                lastFence = i;
+            }
+        }
+
+        if (firstFence >= 0 && lastFence > firstFence)
+            return string.Join("\n", lines[(firstFence + 1)..lastFence]);
+
         var startIdx = 0;
-        var endIdx = lines.Length;
-
-        // Strip leading banner lines (lines starting with "[")
-        while (startIdx < endIdx && lines[startIdx].TrimStart().StartsWith("["))
+        while (startIdx < lines.Length && lines[startIdx].TrimStart().StartsWith("["))
             startIdx++;
-
-        // Strip leading/trailing code fences (``` lines)
-        while (startIdx < endIdx && lines[startIdx].Trim().StartsWith("```"))
-            startIdx++;
-        while (endIdx > startIdx && lines[endIdx - 1].Trim().StartsWith("```"))
-            endIdx--;
-
-        if (startIdx >= endIdx)
-            return result; // nothing useful to strip, return as-is
-
-        return string.Join("\n", lines[startIdx..endIdx]);
+        return string.Join("\n", lines[startIdx..]);
     }
 
     /// <summary>
