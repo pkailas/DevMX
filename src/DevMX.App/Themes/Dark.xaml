@@ -163,8 +163,6 @@
   <Style TargetType="GridSplitter">
     <Setter Property="Background" Value="{StaticResource SplitterBrush}"/>
     <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-    <Setter Property="Width" Value="6"/>
-    <Setter Property="HorizontalAlignment" Value="Center"/>
   </Style>
 
   <!-- ===== SCROLLBAR ===== -->

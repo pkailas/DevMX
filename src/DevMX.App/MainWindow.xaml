@@ -336,7 +336,7 @@
 
         <!-- Horizontal GridSplitter -->
         <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch"
-                      VerticalAlignment="Center" Background="{StaticResource SplitterBrush}"
+                      VerticalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="{StaticResource SplitterBrush}"
                       ShowsPreview="True"/>
 
         <!-- Task Monitor -->
