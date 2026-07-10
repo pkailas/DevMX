@@ -1,3 +1,4 @@
+// CLI spike: connects to DevMind MCP server and runs delegated coding tasks
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;

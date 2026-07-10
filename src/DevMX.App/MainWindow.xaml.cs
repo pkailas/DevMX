@@ -39,17 +39,26 @@ public partial class MainWindow : Window
         Closing += OnWindowClosing;
     }
 
-    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    private bool _closeCompleted;
+
+    private async void OnWindowClosing(object? sender, CancelEventArgs e)
     {
-        // Block briefly to dispose the session cleanly
+        if (_closeCompleted)
+            return;
+
+        // Never block the UI thread on async dispose (deadlock) - defer the close,
+        // dispose on a worker with a cap, then close for real.
+        e.Cancel = true;
         try
         {
-            Vm.DisposeSessionAsync().GetAwaiter().GetResult();
+            await Task.WhenAny(Task.Run(() => Vm.DisposeSessionAsync().AsTask()), Task.Delay(5000));
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[MainWindow] Dispose error on close: {ex.Message}");
         }
+        _closeCompleted = true;
+        Close();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
