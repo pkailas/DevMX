@@ -64,6 +64,9 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void SetTheme(string themeName) => Theme = themeName;
+
     [RelayCommand(CanExecute = nameof(CanApply))]
     private void Apply()
     {
