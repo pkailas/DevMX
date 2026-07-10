@@ -118,16 +118,9 @@
         <StackPanel x:Name="CollapsedRail" Width="44" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Background="{DynamicResource PanelBackground}">
-          <Button Content="≡" FontSize="18" Padding="6,10"
-                  HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                  Command="{Binding ToggleSidebarCommand}"
-                  ToolTip="Toggle sidebar"/>
-          <Button Content="🗨" FontSize="18" Padding="6,10"
-                  HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                  ToolTip="Chat"/>
-          <Button Content="⚙" FontSize="18" Padding="6,10"
-                  HorizontalAlignment="Stretch" VerticalAlignment="Top"
-                  ToolTip="Settings"/>
+          <Button Content="&#9776;" FontSize="16" Padding="6,10" HorizontalAlignment="Stretch" Command="{Binding ToggleSidebarCommand}" ToolTip="Toggle sidebar"/>
+          <Button Content="&#128172;" FontSize="14" Padding="6,10" HorizontalAlignment="Stretch" Click="RailChatBtn_Click" ToolTip="Conversations"/>
+          <Button Content="&#9881;" FontSize="16" Padding="6,10" HorizontalAlignment="Stretch" Click="RailSettingsBtn_Click" ToolTip="Settings"/>
         </StackPanel>
 
         <!-- Expanded rail (260px wide, sidebar content) -->
@@ -297,7 +290,7 @@
                   Margin="8,2,8,8" HorizontalAlignment="Stretch"/>
 
           <!-- Settings pane -->
-          <Border Margin="8,8,8,8" Padding="8"
+          <Border x:Name="SettingsSection" Margin="8,8,8,8" Padding="8"
                   BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   Background="{DynamicResource InputBackground}">
             <StackPanel>

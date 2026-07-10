@@ -166,4 +166,17 @@ public partial class MainWindow : Window
         Vm.Sidebar.SearchText = string.Empty;
         SearchTextBox?.Focus();
     }
+    private void RailChatBtn_Click(object sender, RoutedEventArgs e)
+    {
+        Vm.IsSidebarExpanded = true;
+    }
+
+    private void RailSettingsBtn_Click(object sender, RoutedEventArgs e)
+    {
+        Vm.IsSidebarExpanded = true;
+        // Let layout run, then bring the settings section into view.
+        Dispatcher.BeginInvoke(new Action(() => SettingsSection.BringIntoView()),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
 }
