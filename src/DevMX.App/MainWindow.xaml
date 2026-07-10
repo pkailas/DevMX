@@ -164,7 +164,7 @@
                   Margin="8,4" HorizontalAlignment="Stretch"/>
 
           <!-- Reconnect button -->
-          <Button Content="↻ Reconnect" Command="{Binding ReconnectCommand}"
+          <Button Content="Reconnect" Command="{Binding ReconnectCommand}"
                   Margin="8,2,8,8" HorizontalAlignment="Stretch"/>
 
           <!-- Settings pane -->
@@ -421,7 +421,7 @@
        </Grid>
 
         <!-- Status bar (spans both columns) -->
-        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="24">
+        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="24" Background="{StaticResource PanelBackground}" Foreground="{StaticResource ForegroundBrush}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
@@ -429,7 +429,7 @@
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="11"
                        Foreground="{StaticResource DimBrush}" Padding="8,2"/>
-            <Button Grid.Column="1" Content="↻ Reconnect"
+            <Button Grid.Column="1" Content="Reconnect"
                     Command="{Binding ReconnectCommand}"
                     FontSize="10" Padding="6,2" Margin="4,2"
                     ToolTip="Reconnect with current settings"/>
