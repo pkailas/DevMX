@@ -161,4 +161,27 @@ public class ConversationStoreTests : IDisposable
         Assert.Equal("Conv A", list[0].Title);
         Assert.Equal("Conv B", list[1].Title);
     }
+
+    // --- Test 6: DeleteConversationAsync removes messages/delegations via public API ---
+    [Fact]
+    public async Task DeleteConversation_RemovesMessagesAndDelegationsViaApi()
+    {
+        await using var store = await ConversationStore.OpenAsync(_dbFile);
+
+        var convId = await store.CreateConversationAsync("p", "m", "/w", "To Delete");
+        await store.AppendMessageAsync(convId, "user", "[\"hello\"]");
+        await store.AppendMessageAsync(convId, "assistant", "[\"hi\"]");
+        await store.RecordDelegationAsync(convId, "job-del", "Delegate task");
+
+        // Delete via the public API
+        await store.DeleteConversationAsync(convId);
+
+        var msgs = await store.GetMessagesAsync(convId);
+        var dels = await store.GetDelegationsAsync(convId);
+        var list = await store.ListConversationsAsync();
+
+        Assert.Empty(msgs);
+        Assert.Empty(dels);
+        Assert.Empty(list);
+    }
 }

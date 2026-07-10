@@ -14,17 +14,19 @@ namespace DevMX.App;
 public partial class MainWindow : Window
 {
     private MainViewModel Vm => (MainViewModel)DataContext!;
-    private readonly AppSession _session;
+    private readonly DevMxSettings _settings;
+    private AppSession _session;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // Composition root: create AppSession and dispatch delegate
-        _session = new AppSession();
+        // Composition root: load settings, create AppSession and dispatch delegate
+        _settings = DevMxSettings.Load();
+        _session = new AppSession(_settings);
         Action<Action> dispatch = (action) => Dispatcher.Invoke(action);
 
-        var vm = new MainViewModel(_session, dispatch);
+        var vm = new MainViewModel(_settings, _session, dispatch);
         DataContext = vm;
 
         ((INotifyPropertyChanged)vm).PropertyChanged += OnViewModelPropertyChanged;
@@ -99,6 +101,28 @@ public partial class MainWindow : Window
             };
 
             sv.ScrollToBottom();
+        }
+    }
+
+    /// <summary>
+    /// Show delete button on hover for conversation list items.
+    /// </summary>
+    private void ListBoxItem_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is ListBoxItem item && item.Content is Grid grid)
+        {
+            // The delete button visibility is handled in the DataTemplate trigger
+        }
+    }
+
+    /// <summary>
+    /// Handle conversation selection from the ListBox — trigger switch.
+    /// </summary>
+    private async void ConversationListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox lb && lb.SelectedItem is ConversationItemViewModel item)
+        {
+            await Vm.Sidebar.SelectConversationAsync(item);
         }
     }
 }

@@ -4,5 +4,6 @@ public enum ChatEntryKind
 {
     User,
     Assistant,
-    Tool
+    Tool,
+    Info
 }

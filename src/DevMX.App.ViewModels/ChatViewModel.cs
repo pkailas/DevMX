@@ -22,6 +22,12 @@ public partial class ChatViewModel : ObservableObject
     [ObservableProperty]
     private bool isInitialized;
 
+    [ObservableProperty]
+    private bool isSendDisabled;
+
+    /// <summary>Inverse of IsSendDisabled — used for IsEnabled binding on the input TextBox.</summary>
+    public bool CanSendInput => !IsSendDisabled;
+
     public ChatViewModel(AppSession session, Action<Action> dispatch)
     {
         _session = session;
@@ -44,16 +50,37 @@ public partial class ChatViewModel : ObservableObject
         Entries.Clear();
     }
 
+    internal void ShowProviderMismatchInfo(long conversationId, string providerName)
+    {
+        _dispatch(() =>
+        {
+            ClearEntries();
+            Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info,
+                $"[info] conversation #{conversationId} belongs to provider '{providerName}' — switch provider in Settings to open it"));
+            IsSendDisabled = true;
+            OnPropertyChanged(nameof(CanSendInput));
+        });
+    }
+
+    internal void ClearProviderMismatch()
+    {
+        _dispatch(() =>
+        {
+            IsSendDisabled = false;
+            OnPropertyChanged(nameof(CanSendInput));
+        });
+    }
+
     private bool CanSend()
     {
-        return !IsBusy && IsInitialized && !string.IsNullOrWhiteSpace(InputText);
+        return !IsBusy && IsInitialized && !IsSendDisabled && !string.IsNullOrWhiteSpace(InputText);
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
         var text = InputText.Trim();
-        if (string.IsNullOrWhiteSpace(text) || IsBusy || !IsInitialized)
+        if (string.IsNullOrWhiteSpace(text) || IsBusy || !IsInitialized || IsSendDisabled)
             return;
 
         _dispatch(() =>

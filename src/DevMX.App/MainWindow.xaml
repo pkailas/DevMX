@@ -41,6 +41,16 @@
       </Border>
     </DataTemplate>
 
+    <DataTemplate x:Key="InfoEntryTemplate">
+      <Border Margin="0,4" Padding="8,6"
+              Background="#2a2a4a"
+              BorderBrush="#4a90d9" BorderThickness="1"
+              CornerRadius="4">
+        <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                   FontSize="12" Foreground="#8ab4f8" FontStyle="Italic"/>
+      </Border>
+    </DataTemplate>
+
     <!-- Selector for chat entry kind -->
     <DataTemplate DataType="{x:Type vm:ChatEntryViewModel}">
       <ContentControl>
@@ -56,6 +66,9 @@
               </DataTrigger>
               <DataTrigger Binding="{Binding Kind}" Value="Tool">
                 <Setter Property="ContentTemplate" Value="{StaticResource ToolEntryTemplate}"/>
+              </DataTrigger>
+              <DataTrigger Binding="{Binding Kind}" Value="Info">
+                <Setter Property="ContentTemplate" Value="{StaticResource InfoEntryTemplate}"/>
               </DataTrigger>
             </Style.Triggers>
           </Style>
@@ -100,22 +113,48 @@
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Background="{StaticResource PanelBackground}">
           <!-- Header -->
-          <TextBlock Text="Conversations" FontSize="12" FontWeight="SemiBold"
-                     Foreground="{StaticResource DimBrush}"
-                     Padding="10,8,10,4"/>
+          <StackPanel Orientation="Horizontal" Margin="10,8,10,4">
+            <TextBlock Text="Conversations" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
+          </StackPanel>
 
           <!-- Conversation list -->
           <ListBox ItemsSource="{Binding Sidebar.Conversations}"
                    SelectedItem="{Binding Sidebar.SelectedConversation}"
-                   Margin="4,0" BorderThickness="0">
+                   Margin="4,0" BorderThickness="0"
+                   SelectionChanged="ConversationListBox_SelectionChanged">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <StackPanel Margin="2,1">
-                  <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                             FontSize="12" Foreground="{StaticResource ForegroundBrush}"/>
-                  <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}"
-                             FontSize="10" Foreground="{StaticResource DimBrush}"/>
-                </StackPanel>
+                <Grid Margin="2,1">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                               FontSize="12" Foreground="{StaticResource ForegroundBrush}"/>
+                    <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}"
+                               FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="×" FontSize="10" Padding="2,0,4,0"
+                          Background="Transparent" BorderThickness="0"
+                          Foreground="{StaticResource DimBrush}"
+                          Command="{Binding DataContext.Sidebar.DeleteConversationCommand,
+                                      RelativeSource={RelativeSource AncestorType=ListBox}}"
+                          CommandParameter="{Binding}"
+                          ToolTip="Delete conversation">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsMouseOver}" Value="True">
+                            <Setter Property="Visibility" Value="Visible"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
@@ -124,15 +163,65 @@
           <Button Content="+ New Conversation" Command="{Binding Sidebar.NewConversationCommand}"
                   Margin="8,4" HorizontalAlignment="Stretch"/>
 
-          <!-- Settings placeholder -->
-          <Border Margin="8,16,8,8" Padding="8"
+          <!-- Reconnect button -->
+          <Button Content="↻ Reconnect" Command="{Binding ReconnectCommand}"
+                  Margin="8,2,8,8" HorizontalAlignment="Stretch"/>
+
+          <!-- Settings pane -->
+          <Border Margin="8,8,8,8" Padding="8"
                   BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                   Background="{StaticResource InputBackground}">
             <StackPanel>
               <TextBlock Text="Settings" FontSize="12" FontWeight="SemiBold"
-                         Foreground="{StaticResource DimBrush}"/>
-              <TextBlock Text="(placeholder)" FontSize="11"
-                         Foreground="{StaticResource DimBrush}" Margin="0,4,0,0"/>
+                         Foreground="{StaticResource DimBrush}" Margin="0,0,0,6"/>
+
+              <!-- Endpoint -->
+              <StackPanel Margin="0,2">
+                <TextBlock Text="Endpoint" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Endpoint, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="11" Padding="4,2"/>
+              </StackPanel>
+
+              <!-- Model -->
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Model (empty = auto)" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Model, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="11" Padding="4,2"/>
+              </StackPanel>
+
+              <!-- Provider -->
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Provider (openai / anthropic)" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Provider, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="11" Padding="4,2"/>
+              </StackPanel>
+
+              <!-- Workdir -->
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Workdir" FontSize="10" Foreground="{StaticResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.WorkDir, UpdateSourceTrigger=PropertyChanged}"
+                         FontSize="11" Padding="4,2"/>
+              </StackPanel>
+
+              <!-- Read-only info -->
+              <Border Margin="0,6,0,4" Padding="4" Background="#1a1a2e">
+                <StackPanel>
+                  <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}">
+                    <Run Text="MCP Server:" FontWeight="SemiBold"/>
+                    <LineBreak/>
+                    <Run Text="{Binding Settings.ServerExe}" FontSize="9"/>
+                  </TextBlock>
+                  <TextBlock FontSize="10" Foreground="{StaticResource DimBrush}" Margin="0,2,0,0">
+                    <Run Text="API Key:" FontWeight="SemiBold"/>
+                    <LineBreak/>
+                    <Run Text="{Binding Settings.ApiKeySource}" FontSize="9"/>
+                  </TextBlock>
+                </StackPanel>
+              </Border>
+
+              <!-- Apply button -->
+              <Button Content="Apply &amp; Reconnect" Command="{Binding Settings.ApplyCommand}"
+                      Margin="0,4,0,0" HorizontalAlignment="Stretch"/>
             </StackPanel>
           </Border>
         </StackPanel>
@@ -319,7 +408,8 @@
                    Text="{Binding Chat.InputText, UpdateSourceTrigger=PropertyChanged}"
                    KeyDown="ChatInput_KeyDown"
                    Padding="8,6"
-                   VerticalContentAlignment="Center"/>
+                   VerticalContentAlignment="Center"
+                   IsEnabled="{Binding Chat.CanSendInput}"/>
 
           <Button Grid.Column="1" Content="Send"
                   Command="{Binding Chat.SendCommand}"
@@ -332,8 +422,18 @@
 
         <!-- Status bar (spans both columns) -->
         <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="24">
-          <TextBlock Text="{Binding StatusText}" FontSize="11"
-                     Foreground="{StaticResource DimBrush}" Padding="8,2"/>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="11"
+                       Foreground="{StaticResource DimBrush}" Padding="8,2"/>
+            <Button Grid.Column="1" Content="↻ Reconnect"
+                    Command="{Binding ReconnectCommand}"
+                    FontSize="10" Padding="6,2" Margin="4,2"
+                    ToolTip="Reconnect with current settings"/>
+          </Grid>
         </StatusBar>
     </Grid>
 </Window>

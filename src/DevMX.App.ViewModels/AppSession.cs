@@ -13,9 +13,7 @@ namespace DevMX.App.ViewModels;
 /// </summary>
 public sealed class AppSession : IAsyncDisposable
 {
-    private const string DefaultServerExe = @"C:\Users\pkailas\source\repos\DevMind\dist\mcp\DevMind.McpServer.exe";
-    private const string DefaultWorkDir = @"C:\Users\pkailas\source\repos\DevMX";
-    private const string DefaultEndpoint = "http://127.0.0.1:8080/v1";
+    private readonly DevMxSettings _settings;
 
     public static string DefaultDbPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevMX", "devmx.db");
@@ -23,7 +21,6 @@ public sealed class AppSession : IAsyncDisposable
     /// <summary>System prompt shown to the LLM — mirrors the REPL constant.</summary>
     public string SystemPrompt { get; }
 
-    private readonly string _workDir;
     private DevMxMcpClient? _mcp;
     private ConversationStore? _store;
     private IChatProvider? _provider;
@@ -34,17 +31,17 @@ public sealed class AppSession : IAsyncDisposable
     public long ConversationId { get; private set; }
     public int ToolCount { get; private set; }
 
-    /// <summary>Creates a session with the default settings (matching the REPL defaults).</summary>
-    public AppSession()
-        : this(DefaultWorkDir)
-    {
-    }
+    /// <summary>Exposes the conversation store for sidebar operations.</summary>
+    public ConversationStore? Store => _store;
 
-    /// <summary>Creates a session with a custom working directory.</summary>
-    public AppSession(string workDir)
+    /// <summary>Exposes the current provider for provider-name checks.</summary>
+    public IChatProvider? Provider => _provider;
+
+    /// <summary>Creates a session with the given settings.</summary>
+    public AppSession(DevMxSettings settings)
     {
-        _workDir = workDir;
-        SystemPrompt = $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {_workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
+        _settings = settings;
+        SystemPrompt = $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {settings.WorkDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
     }
 
     /// <summary>
@@ -54,8 +51,11 @@ public sealed class AppSession : IAsyncDisposable
     public async Task InitializeAsync(CancellationToken ct = default)
     {
         string dbPath = DefaultDbPath;
-        string serverExe = DefaultServerExe;
-        string endpoint = DefaultEndpoint;
+        string serverExe = _settings.ServerExe;
+        string endpoint = _settings.Endpoint;
+        string workDir = _settings.WorkDir;
+        string provider = _settings.Provider;
+        string? modelOverride = string.IsNullOrEmpty(_settings.Model) ? null : _settings.Model;
 
         // Ensure DB directory exists
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
@@ -66,39 +66,46 @@ public sealed class AppSession : IAsyncDisposable
 
         // 2. Start MCP client
         Console.WriteLine($"[AppSession] Starting MCP server at {serverExe}...");
-        _mcp = await DevMxMcpClient.StartAsync(serverExe, _workDir, ct);
+        _mcp = await DevMxMcpClient.StartAsync(serverExe, workDir, ct);
         var tools = await _mcp.ListToolsAsync(ct);
         ToolCount = tools.Count;
         Console.WriteLine($"[AppSession] MCP connected: {ToolCount} tools available");
 
         // 3. Model auto-discovery (same logic as REPL)
-        string? model = null;
+        string? model = modelOverride;
         string? modelDiscoveryError = null;
-        try
+
+        if (provider == "openai" && string.IsNullOrEmpty(model))
         {
-            using var discoveryClient = new HttpClient();
-            discoveryClient.Timeout = TimeSpan.FromSeconds(5);
-            var resp = await discoveryClient.GetAsync($"{endpoint}/models", ct);
-            if (resp.IsSuccessStatusCode)
+            try
             {
-                using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-                if (doc.RootElement.TryGetProperty("data", out var dataArray) && dataArray.GetArrayLength() > 0)
+                using var discoveryClient = new HttpClient();
+                discoveryClient.Timeout = TimeSpan.FromSeconds(5);
+                var resp = await discoveryClient.GetAsync($"{endpoint}/models", ct);
+                if (resp.IsSuccessStatusCode)
                 {
-                    model = dataArray[0].GetProperty("id").GetString();
-                    Console.WriteLine($"[AppSession] Model auto-discovered: {model}");
+                    using var doc = await JsonDocument.ParseAsync(await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+                    if (doc.RootElement.TryGetProperty("data", out var dataArray) && dataArray.GetArrayLength() > 0)
+                    {
+                        model = dataArray[0].GetProperty("id").GetString();
+                        Console.WriteLine($"[AppSession] Model auto-discovered: {model}");
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                modelDiscoveryError = $"Model auto-discovery failed: {ex.Message}";
+                Console.WriteLine($"[AppSession] {modelDiscoveryError}");
+            }
         }
-        catch (Exception ex)
+
+        if (provider == "anthropic" && string.IsNullOrEmpty(model))
         {
-            modelDiscoveryError = $"Model auto-discovery failed: {ex.Message}";
-            Console.WriteLine($"[AppSession] {modelDiscoveryError}");
+            model = "claude-sonnet-4-5";
         }
 
         if (string.IsNullOrEmpty(model))
         {
-            // Model is unset — we'll surface the error on first send, but still create the provider
-            // with a placeholder model so the session is "initialized" (send will fail with a clear message).
             model = "(unset)";
             Model = model;
         }
@@ -108,26 +115,48 @@ public sealed class AppSession : IAsyncDisposable
         }
 
         // 4. Create provider
-        _provider = new OpenAiCompatClient(endpoint, null, model!);
+        _provider = CreateProvider(provider, endpoint, model!);
 
         // 5. Create initial conversation
-        ConversationId = await _store.CreateConversationAsync("openai", model!, _workDir, "(untitled)");
+        ConversationId = await _store.CreateConversationAsync(provider, model!, workDir, "(untitled)");
         Console.WriteLine($"[AppSession] Created conversation #{ConversationId}");
 
         // 6. Create initial AgenticLoop
         _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt);
 
         IsInitialized = true;
-        Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model}");
+        Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model} | provider={provider}");
+    }
+
+    private static IChatProvider CreateProvider(string provider, string endpoint, string model)
+    {
+        if (provider == "anthropic")
+        {
+            string key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
+            if (string.IsNullOrEmpty(key))
+                throw new InvalidOperationException("ANTHROPIC_API_KEY environment variable is not set.");
+            return new AnthropicClient(key, model);
+        }
+        return new OpenAiCompatClient(endpoint, Environment.GetEnvironmentVariable("OPENAI_COMPAT_API_KEY"), model);
+    }
+
+    /// <summary>
+    /// Opens an existing conversation by ID. Loads history and rebuilds the AgenticLoop.
+    /// </summary>
+    public async Task OpenConversationAsync(long conversationId, CancellationToken ct = default)
+    {
+        if (_store == null || _provider == null || _mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        ConversationId = conversationId;
+        var history = await AgenticLoop.LoadHistoryAsync(_store, conversationId);
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history);
+        Console.WriteLine($"[AppSession] Opened conversation #{conversationId} ({history.Count} messages)");
     }
 
     /// <summary>
     /// Runs a single agentic turn for the current conversation.
     /// </summary>
-    /// <param name="userText">User's input text.</param>
-    /// <param name="onAssistantText">Called with each text block from the assistant.</param>
-    /// <param name="onToolCall">Called with tool name and JSON args when a tool is invoked.</param>
-    /// <param name="ct">Cancellation token.</param>
     public async Task StartTurnAsync(
         string userText,
         Action<string> onAssistantText,
@@ -156,7 +185,7 @@ public sealed class AppSession : IAsyncDisposable
         if (_store == null || _provider == null || _mcp == null)
             throw new InvalidOperationException("AppSession not initialized.");
 
-        ConversationId = await _store.CreateConversationAsync("openai", Model!, _workDir, "(untitled)");
+        ConversationId = await _store.CreateConversationAsync(_settings.Provider, Model!, _settings.WorkDir, "(untitled)");
         _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt);
         Console.WriteLine($"[AppSession] New conversation #{ConversationId}");
         return ConversationId;
@@ -173,7 +202,9 @@ public sealed class AppSession : IAsyncDisposable
         await _store.UpdateTitleAsync(ConversationId, title);
     }
 
-    /// <summary>Gets the current AgenticLoop (for internal access if needed).</summary>
+    /// <summary>
+    /// Gets the current AgenticLoop (for internal access if needed).
+    /// </summary>
     internal AgenticLoop? Loop => _loop;
 
     public async ValueTask DisposeAsync()

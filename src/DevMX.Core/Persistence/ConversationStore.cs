@@ -237,6 +237,15 @@ public sealed class ConversationStore : IAsyncDisposable
         return results;
     }
 
+    public async Task DeleteConversationAsync(long conversationId)
+    {
+        using var conn = CreateConnection();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"DELETE FROM conversations WHERE id = @convId;";
+        cmd.Parameters.AddWithValue("@convId", conversationId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     public async Task UpdateTitleAsync(long conversationId, string title)
     {
         using var conn = CreateConnection();
