@@ -10,10 +10,17 @@ public partial class ChatEntryViewModel : ObservableObject
     [ObservableProperty]
     private string text = string.Empty;
 
-    public ChatEntryViewModel(ChatEntryKind kind, string text)
+    [ObservableProperty]
+    private string? filePath;
+
+    /// <summary>True when this is a Tool entry with a clickable file path.</summary>
+    public bool IsClickable => Kind == ChatEntryKind.Tool && FilePath != null;
+
+    public ChatEntryViewModel(ChatEntryKind kind, string text, string? filePath = null)
     {
         Kind = kind;
         Text = text;
+        FilePath = filePath;
     }
 
     /// <summary>Appends text to the current content (used for streaming assistant responses).</summary>

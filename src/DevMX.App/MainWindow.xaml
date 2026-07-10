@@ -2,11 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:DevMX.App.ViewModels;assembly=DevMX.App.ViewModels"
+        xmlns:app="clr-namespace:DevMX.App"
+        xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="DevMX" Width="1400" Height="900"
         MinWidth="800" MinHeight="500">
 
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolVis"/>
+    <app:EnumToBoolConverter x:Key="EnumToBool"/>
 
     <!-- Chat entry templates by Kind -->
     <DataTemplate x:Key="UserEntryTemplate">
@@ -36,8 +39,27 @@
       <Border Margin="0,2" Padding="6,3"
               Background="{StaticResource InputBackground}"
               BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
-        <TextBlock Text="{Binding Text}" FontFamily="{StaticResource MonospaceFontFamily}"
-                   FontSize="12" Foreground="{StaticResource DimBrush}"/>
+        <TextBlock FontFamily="{StaticResource MonospaceFontFamily}"
+                   FontSize="12">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Text" Value="{Binding Text}"/>
+              <Setter Property="Foreground" Value="{StaticResource DimBrush}"/>
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsClickable}" Value="True">
+                  <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                  <Setter Property="TextDecorations" Value="Underline"/>
+                  <Setter Property="Cursor" Value="Hand"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+          <TextBlock.InputBindings>
+            <MouseBinding Gesture="LeftClick"
+                          Command="{Binding DataContext.Chat.OpenToolFileCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                          CommandParameter="{Binding}"/>
+          </TextBlock.InputBindings>
+        </TextBlock>
       </Border>
     </DataTemplate>
 
@@ -291,22 +313,25 @@
               </StackPanel>
             </DataTemplate>
           </TabControl.ItemTemplate>
-          <TabControl.ContentTemplate>
+           <TabControl.ContentTemplate>
             <DataTemplate>
-              <TextBox Text="{Binding Content, Mode=OneWay}"
-                       IsReadOnly="True"
-                       FontFamily="{StaticResource MonospaceFontFamily}"
-                       FontSize="12"
-                       TextWrapping="NoWrap"
-                       VerticalScrollBarVisibility="Auto"
-                       HorizontalScrollBarVisibility="Auto"
-                       BorderThickness="0"
-                       Padding="8"
-                       Background="{StaticResource PanelBackground}"
-                       Foreground="{StaticResource ForegroundBrush}"
-                       AcceptsReturn="True"/>
+              <avalonedit:TextEditor
+                  app:AvalonEditBehavior.BoundText="{Binding Content}"
+                  app:AvalonEditBehavior.SyntaxExtension="{Binding FileExtension}"
+                  app:AvalonEditBehavior.IsDiff="{Binding Kind, Converter={StaticResource EnumToBool}, ConverterParameter=Diff}"
+                  IsReadOnly="True"
+                  ShowLineNumbers="True"
+                  FontFamily="{StaticResource MonospaceFontFamily}"
+                  FontSize="12"
+                  WordWrap="False"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  BorderThickness="0"
+                  Padding="4"
+                  Background="#1E1E1E"
+                  Foreground="#D4D4D4"/>
             </DataTemplate>
-          </TabControl.ContentTemplate>
+           </TabControl.ContentTemplate>
         </TabControl>
 
         <!-- Horizontal GridSplitter -->

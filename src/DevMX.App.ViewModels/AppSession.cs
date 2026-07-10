@@ -161,7 +161,8 @@ public sealed class AppSession : IAsyncDisposable
         string userText,
         Action<string> onAssistantText,
         Action<string, string> onToolCall,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<string, string, string>? onToolResult = null)
     {
         if (!IsInitialized)
             throw new InvalidOperationException("AppSession not initialized. Call InitializeAsync first.");
@@ -173,7 +174,39 @@ public sealed class AppSession : IAsyncDisposable
         if (Model == "(unset)")
             throw new InvalidOperationException("Model is not set. Could not auto-discover a model from the /models endpoint. Please ensure your local LLM server is running.");
 
-        await _loop.RunTurnAsync(userText, onAssistantText, onToolCall, ct);
+        await _loop.RunTurnAsync(userText, onAssistantText, onToolCall, ct, onToolResult);
+    }
+
+    /// <summary>
+    /// Fetches file content by calling the MCP read_file tool directly.
+    /// Strips any tool-banner prefix lines from the result.
+    /// </summary>
+    public async Task<string> FetchFileAsync(string path)
+    {
+        if (_mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        var result = await _mcp.CallToolAsync("read_file", new Dictionary<string, object?> { ["path"] = path });
+
+        // Best-effort strip tool-banner prefix lines (e.g. "[READ:...]" or code fences)
+        var lines = result.Split('\n');
+        var startIdx = 0;
+        var endIdx = lines.Length;
+
+        // Strip leading banner lines (lines starting with "[")
+        while (startIdx < endIdx && lines[startIdx].TrimStart().StartsWith("["))
+            startIdx++;
+
+        // Strip leading/trailing code fences (``` lines)
+        while (startIdx < endIdx && lines[startIdx].Trim().StartsWith("```"))
+            startIdx++;
+        while (endIdx > startIdx && lines[endIdx - 1].Trim().StartsWith("```"))
+            endIdx--;
+
+        if (startIdx >= endIdx)
+            return result; // nothing useful to strip, return as-is
+
+        return string.Join("\n", lines[startIdx..endIdx]);
     }
 
     /// <summary>

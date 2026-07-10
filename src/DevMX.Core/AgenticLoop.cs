@@ -85,7 +85,8 @@ public sealed class AgenticLoop
         string userText,
         Action<string> onAssistantText,
         Action<string, string> onToolCall,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Action<string, string, string>? onToolResult = null)
     {
         // 1. Build user message and append to history + store.
         var userMsg = _llm.BuildUserMessage(userText);
@@ -127,6 +128,7 @@ public sealed class AgenticLoop
                 var args = ConvertToJsonDictionary(call.Input);
                 var result = await _tools.CallToolAsync(call.Name, args, ct);
                 onToolCall(call.Name, call.Input.ToJsonString());
+                onToolResult?.Invoke(call.Name, call.Input.ToJsonString(), result);
                 callResults.Add((call, result));
 
                 // Capture delegation lifecycle.

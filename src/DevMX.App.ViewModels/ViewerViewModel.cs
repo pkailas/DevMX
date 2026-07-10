@@ -14,12 +14,42 @@ public partial class ViewerViewModel : ObservableObject
 
     public ViewerViewModel()
     {
-        Tabs = new ObservableCollection<ViewerTabViewModel>(new[]
+        Tabs = new ObservableCollection<ViewerTabViewModel>();
+    }
+
+    /// <summary>Opens a file tab, deduplicating by title (re-selects and refreshes content if already open).</summary>
+    public void OpenFileTab(string title, string content, string extension = "")
+    {
+        var existing = Tabs.FirstOrDefault(t => t.Title == title);
+        if (existing != null)
         {
-            new ViewerTabViewModel("README.md", "# DevMX\n\nA developer assistant application.\n\n## Getting Started\n\nRun `dotnet run` to start the chat CLI."),
-            new ViewerTabViewModel("diff: Program.cs", "--- a/Program.cs\n+++ b/Program.cs\n@@ -1,3 +1,5 @@\n+using DevMX.Core;\n \n var loop = new AgenticLoop();\n+loop.Start();\n"),
-        });
-        SelectedTab = Tabs[0];
+            existing.Content = content;
+            existing.FileExtension = extension;
+            existing.Kind = ViewerTabKind.File;
+            SelectedTab = existing;
+            return;
+        }
+
+        var tab = new ViewerTabViewModel(title, content, ViewerTabKind.File, extension);
+        Tabs.Add(tab);
+        SelectedTab = tab;
+    }
+
+    /// <summary>Opens a diff tab with unified diff text, deduplicating by title.</summary>
+    public void OpenDiffTab(string title, string unifiedDiffText)
+    {
+        var existing = Tabs.FirstOrDefault(t => t.Title == title);
+        if (existing != null)
+        {
+            existing.Content = unifiedDiffText;
+            existing.Kind = ViewerTabKind.Diff;
+            SelectedTab = existing;
+            return;
+        }
+
+        var tab = new ViewerTabViewModel(title, unifiedDiffText, ViewerTabKind.Diff);
+        Tabs.Add(tab);
+        SelectedTab = tab;
     }
 
     [RelayCommand]

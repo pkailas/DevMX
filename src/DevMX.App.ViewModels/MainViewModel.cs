@@ -42,6 +42,30 @@ public partial class MainViewModel : ObservableObject
         Viewer = new ViewerViewModel();
         TaskMonitor = new TaskMonitorViewModel();
 
+        // Wire viewer callbacks into ChatViewModel
+        chatVm.SetOpenDiffTabCallback((title, diffText) =>
+        {
+            _dispatch(() => Viewer.OpenDiffTab(title, diffText));
+        });
+        chatVm.SetOpenFileCallback(async (filePath) =>
+        {
+            try
+            {
+                var content = await _session.FetchFileAsync(filePath);
+                var fileName = Path.GetFileName(filePath) ?? filePath;
+                var extension = Path.GetExtension(filePath);
+                _dispatch(() => Viewer.OpenFileTab(fileName, content, extension));
+            }
+            catch (Exception ex)
+            {
+                _dispatch(() =>
+                {
+                    Chat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info,
+                        $"[error] Could not open file '{filePath}': {ex.Message}"));
+                });
+            }
+        });
+
         // Wire sidebar events
         Sidebar.OnProviderMismatch += (convId, providerName) =>
         {
@@ -198,7 +222,31 @@ public partial class MainViewModel : ObservableObject
         // Re-create ViewModels with the new session
         var newChat = new ChatViewModel(_session, _dispatch);
         newChat.SetAutoTitleCallback(async (msg) => await Sidebar.AutoTitleAsync(msg));
-        
+
+        // Re-wire viewer callbacks
+        newChat.SetOpenDiffTabCallback((title, diffText) =>
+        {
+            _dispatch(() => Viewer.OpenDiffTab(title, diffText));
+        });
+        newChat.SetOpenFileCallback(async (filePath) =>
+        {
+            try
+            {
+                var content = await _session.FetchFileAsync(filePath);
+                var fileName = Path.GetFileName(filePath) ?? filePath;
+                var extension = Path.GetExtension(filePath);
+                _dispatch(() => Viewer.OpenFileTab(fileName, content, extension));
+            }
+            catch (Exception ex)
+            {
+                _dispatch(() =>
+                {
+                    Chat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info,
+                        $"[error] Could not open file '{filePath}': {ex.Message}"));
+                });
+            }
+        });
+
         // Re-wire sidebar events
         var newSidebar = new SidebarViewModel(_session, _dispatch, newChat.ClearEntries);
         newSidebar.OnProviderMismatch += (convId, providerName) =>

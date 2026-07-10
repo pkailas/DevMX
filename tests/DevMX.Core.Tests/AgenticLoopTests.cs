@@ -311,4 +311,40 @@ public class AgenticLoopTests : IDisposable
         // Only the new messages from this turn (user + assistant).
         Assert.Equal(2, messages.Count);
     }
+
+    // --- Test 7: onToolResult callback fires with tool result ---
+    [Fact]
+    public async Task OnToolResult_CallbackFiresWithResult()
+    {
+        // Arrange
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "read_file", new JsonObject { ["path"] = "test.cs" }),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+        var handler = new StubHttpHandler(toolUseResponse, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new FakeToolExecutor
+        {
+            ToolResults = { ["read_file"] = "FILE CONTENT FROM EXECUTOR" }
+        };
+        var loop = new AgenticLoop(client, executor, store, convId, null);
+
+        var toolResults = new List<(string Name, string Args, string Result)>();
+
+        // Act
+        await loop.RunTurnAsync("Read file",
+            _ => { },
+            (_, _) => { },
+            default,
+            (name, args, result) => toolResults.Add((name, args, result)));
+
+        // Assert
+        Assert.Single(toolResults);
+        Assert.Equal("read_file", toolResults[0].Name);
+        Assert.Equal("FILE CONTENT FROM EXECUTOR", toolResults[0].Result);
+        Assert.Contains("path", toolResults[0].Args);
+    }
 }
