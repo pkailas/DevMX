@@ -225,7 +225,7 @@ public partial class SidebarViewModel : ObservableObject
             long newId = await _session.CreateNewConversationAsync();
             _dispatch(() =>
             {
-                var item = new ConversationItemViewModel(newId, "(untitled)", DateTime.UtcNow);
+                var item = new ConversationItemViewModel(newId, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}", DateTime.UtcNow);
                 Conversations.Insert(0, item);
                 SelectedConversation = item;
                 _clearChatEntries();

@@ -118,7 +118,7 @@ public sealed class AppSession : IAsyncDisposable
         _provider = CreateProvider(provider, endpoint, model!);
 
         // 5. Create initial conversation
-        ConversationId = await _store.CreateConversationAsync(provider, model!, workDir, "(untitled)");
+        ConversationId = await _store.CreateConversationAsync(provider, model!, workDir, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}");
         Console.WriteLine($"[AppSession] Created conversation #{ConversationId}");
 
         // 6. Create initial AgenticLoop
@@ -316,7 +316,7 @@ public sealed class AppSession : IAsyncDisposable
         if (_store == null || _provider == null || _mcp == null)
             throw new InvalidOperationException("AppSession not initialized.");
 
-        ConversationId = await _store.CreateConversationAsync(_settings.Provider, Model!, _settings.WorkDir, "(untitled)");
+        ConversationId = await _store.CreateConversationAsync(_settings.Provider, Model!, _settings.WorkDir, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}");
         _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt);
         Console.WriteLine($"[AppSession] New conversation #{ConversationId}");
         return ConversationId;
