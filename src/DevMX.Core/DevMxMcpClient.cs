@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using ModelContextProtocol.Client;
@@ -11,7 +12,7 @@ namespace DevMX.Core;
 /// <summary>
 /// Thin wrapper around the ModelContextProtocol stdio client for driving the DevMind MCP server.
 /// </summary>
-public sealed class DevMxMcpClient : IAsyncDisposable
+public sealed class DevMxMcpClient : IMcpToolExecutor, IAsyncDisposable
 {
     private readonly McpClient _client;
 
@@ -48,6 +49,33 @@ public sealed class DevMxMcpClient : IAsyncDisposable
     public async Task<IList<McpClientTool>> ListToolsAsync(CancellationToken cancellationToken = default)
     {
         return await _client.ListToolsAsync(cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns tool definitions suitable for passing to an LLM provider.
+    /// </summary>
+    public async Task<IReadOnlyList<ToolDefinition>> ListToolDefinitionsAsync(CancellationToken ct = default)
+    {
+        var tools = await ListToolsAsync(ct);
+        var definitions = new List<ToolDefinition>(tools.Count);
+        foreach (var tool in tools)
+        {
+            // Protocol.Tool.InputSchema is JsonElement — convert to JsonObject for our wire format.
+            JsonObject inputSchema;
+            if (tool.ProtocolTool.InputSchema.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+            {
+                inputSchema = new JsonObject { ["type"] = "object" };
+            }
+            else
+            {
+                inputSchema = JsonNode.Parse(tool.ProtocolTool.InputSchema.GetRawText())!.AsObject();
+            }
+            definitions.Add(new ToolDefinition(
+                Name: tool.ProtocolTool.Name,
+                Description: tool.ProtocolTool.Description ?? "",
+                InputSchema: inputSchema));
+        }
+        return definitions;
     }
 
     /// <summary>
