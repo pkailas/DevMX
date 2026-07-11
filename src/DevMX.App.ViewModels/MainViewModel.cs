@@ -11,6 +11,9 @@ public partial class MainViewModel : ObservableObject
     public TaskMonitorViewModel TaskMonitor { get; }
     public SettingsViewModel Settings { get; }
 
+    /// <summary>Fired when the menu/shortcut requests focus on the sidebar search box.</summary>
+    public event Action? OnRequestFocusSearch;
+
     private readonly DevMxSettings _settings;
     private AppSession _session;
     private readonly Action<Action> _dispatch;
@@ -104,9 +107,7 @@ public partial class MainViewModel : ObservableObject
                     fullList?.Insert(0, item);
                     Sidebar.SelectedConversation = item;
                     Chat.ClearEntries();
-                    // Mark not titled so auto-title can work
-                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                        ;
+                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
                     isTitledField.SetValue(Sidebar, false);
                     var clearEvent = typeof(SidebarViewModel).GetEvent("OnClearProviderMismatch")!;
                     var raiseMethod = clearEvent.GetRaiseMethod()!;
@@ -141,10 +142,7 @@ public partial class MainViewModel : ObservableObject
             SetTheme = (theme) => { Settings.SetThemeCommand.Execute(theme); },
             SetToolProfile = (profile) => { Settings.SetToolProfileCommand.Execute(profile); },
             SetPollThrottle = (value) => { _settings.PollThrottleSeconds = value; _settings.Save(); },
-            AddInfoEntry = (text) =>
-            {
-                _dispatch(() => Chat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, text)));
-            },
+            AddInfoEntry = (text) => AddInfoEntry(text),
             ClearInputText = () =>
             {
                 _dispatch(() => Chat.InputText = string.Empty);
@@ -184,6 +182,17 @@ public partial class MainViewModel : ObservableObject
         {
             _ = ApplyAndReconnectAsync();
         }, _onThemeChanged);
+
+        // Wire Settings property changes to update menu checkmarks
+        ((System.ComponentModel.INotifyPropertyChanged)Settings).PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(Settings.Theme) || e.PropertyName == nameof(Settings.ToolProfile))
+            {
+                OnPropertyChanged(nameof(IsDarkTheme));
+                OnPropertyChanged(nameof(IsLightTheme));
+                OnPropertyChanged(nameof(CurrentToolProfile));
+            }
+        };
     }
 
     public async Task InitializeAsync()
@@ -549,5 +558,136 @@ public partial class MainViewModel : ObservableObject
     private void ToggleSidebar()
     {
         IsSidebarExpanded = !IsSidebarExpanded;
+    }
+
+    // ===== Menu bar commands (thin wrappers sharing slash-command logic) =====
+
+    /// <summary>Change working directory — same flow as /dir -b (folder picker wired by MainWindow).</summary>
+    [RelayCommand]
+    private async Task ChangeWorkingDirectoryAsync()
+    {
+        // This triggers the /dir -b flow via the slash command handler's PickFolder callback.
+        // The actual folder picker is wired in MainWindow.xaml.cs.
+        // We invoke the shared dir-change logic:
+        string? currentDir = _settings.WorkDir;
+        // PickFolder callback is set by MainWindow; if null, show info
+        // We call the slash handler directly to reuse the /dir -b flow
+        var slashHandlerField = typeof(ChatViewModel).GetField("_slashCommandHandler",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var handler = slashHandlerField.GetValue(Chat) as SlashCommandHandler;
+        if (handler != null)
+        {
+            handler.ExecuteCommand("/dir -b");
+        }
+    }
+
+    /// <summary>Create a new conversation — same flow as /new and Sidebar.NewConversationCommand.</summary>
+    [RelayCommand]
+    private async Task NewConversationAsync()
+    {
+        await ExecuteNewConversationAsync();
+    }
+
+    /// <summary>Begin rename on the currently selected sidebar item.</summary>
+    [RelayCommand]
+    private void RenameCurrentConversation()
+    {
+        if (Sidebar.SelectedConversation != null)
+        {
+            Sidebar.BeginRenameCommand.Execute(Sidebar.SelectedConversation);
+        }
+    }
+
+    /// <summary>Expand sidebar and focus search — same flow as /search.</summary>
+    [RelayCommand]
+    private void FocusSearch()
+    {
+        IsSidebarExpanded = true;
+        OnRequestFocusSearch?.Invoke();
+    }
+
+    /// <summary>Show the /help output as an Info entry in chat.</summary>
+    [RelayCommand]
+    private void ShowHelp()
+    {
+        AddInfoEntry(GenerateHelpText());
+    }
+
+    /// <summary>Show about info as an Info entry in chat.</summary>
+    [RelayCommand]
+    private void ShowAbout()
+    {
+        AddInfoEntry("DevMX — AI-powered developer assistant\n\n" +
+            "A local-first development tool integrating with your MCP server.\n\n" +
+            "Repository: https://github.com/DevMX/DevMX");
+    }
+
+    /// <summary>Set the theme (dark/light) — same setter as settings segmented buttons.</summary>
+    [RelayCommand]
+    private void SetTheme(string themeName)
+    {
+        Settings.SetThemeCommand.Execute(themeName);
+    }
+
+    /// <summary>Set the tool profile — same setter as settings segmented buttons.</summary>
+    [RelayCommand]
+    private void SetToolProfileMenu(string profileName)
+    {
+        Settings.SetToolProfileCommand.Execute(profileName);
+    }
+
+    /// <summary>Check if the current theme is dark.</summary>
+    public bool IsDarkTheme => Settings.Theme == "dark";
+
+    /// <summary>Check if the current theme is light.</summary>
+    public bool IsLightTheme => Settings.Theme == "light";
+
+    /// <summary>Current tool profile for menu checkmarks.</summary>
+    public string CurrentToolProfile => Settings.ToolProfile;
+
+    // ===== Shared private methods (used by both slash commands and menu commands) =====
+
+    private async Task ExecuteNewConversationAsync()
+    {
+        try
+        {
+            long newId = await _session.CreateNewConversationAsync();
+            _dispatch(() =>
+            {
+                var item = new ConversationItemViewModel(newId, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}", DateTime.UtcNow);
+                Sidebar.Conversations.Insert(0, item);
+                var fullList = typeof(SidebarViewModel).GetField("_fullList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(Sidebar) as System.Collections.ObjectModel.ObservableCollection<ConversationItemViewModel>;
+                fullList?.Insert(0, item);
+                Sidebar.SelectedConversation = item;
+                Chat.ClearEntries();
+                var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                isTitledField.SetValue(Sidebar, false);
+                var clearEvent = typeof(SidebarViewModel).GetEvent("OnClearProviderMismatch")!;
+                var raiseMethod = clearEvent.GetRaiseMethod()!;
+                raiseMethod.Invoke(Sidebar, null!);
+            });
+        }
+        catch (Exception ex)
+        {
+            AddInfoEntry($"[error] Could not create conversation: {ex.Message}");
+        }
+    }
+
+    private void AddInfoEntry(string text)
+    {
+        _dispatch(() => Chat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, text)));
+    }
+
+    private string GenerateHelpText()
+    {
+        return @"Available commands:
+  /help                Show this help
+  /dir [path] [-b]     Show or change working directory (-b opens folder picker)
+  /new                 Start a new conversation
+  /open <id>           Open conversation by ID
+  /search <term>       Search conversations
+  /theme dark|light    Switch theme
+  /poll <n>            Set poll throttle (0-60 seconds)
+  /profile auto|full|restricted  Set tool access profile";
     }
 }

@@ -7,9 +7,16 @@
         Title="{Binding WindowTitle}" Width="1400" Height="900"
         MinWidth="800" MinHeight="500">
 
+  <Window.InputBindings>
+    <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewConversationCommand}"/>
+    <KeyBinding Key="F" Modifiers="Ctrl" Command="{Binding FocusSearchCommand}"/>
+    <KeyBinding Key="B" Modifiers="Ctrl" Command="{Binding ToggleSidebarCommand}"/>
+  </Window.InputBindings>
+
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolVis"/>
     <app:EnumToBoolConverter x:Key="EnumToBool"/>
+    <app:StringEqualsBoolConverter x:Key="StringEquals"/>
 
     <!-- Chat entry templates by Kind -->
     <DataTemplate x:Key="UserEntryTemplate">
@@ -99,9 +106,10 @@
     </DataTemplate>
   </Window.Resources>
 
-  <!-- Outer Grid: rail | content -->
+  <!-- Outer Grid: menu bar (row 0), rail + content (row 1), status bar (row 2) -->
   <Grid>
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
       <RowDefinition Height="*"/>
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
@@ -110,8 +118,53 @@
       <ColumnDefinition Width="*"/>
     </Grid.ColumnDefinitions>
 
-    <!-- ===== RAIL (far left) ===== -->
-    <Border Grid.Column="0" Background="{DynamicResource PanelBackground}"
+    <!-- ===== MENU BAR (row 0, spans all columns) ===== -->
+    <Menu Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+          Background="{DynamicResource PanelBackground}"
+          Foreground="{DynamicResource ForegroundBrush}"
+          BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1">
+      <!-- File -->
+      <MenuItem Header="_File" Style="{StaticResource TopLevelMenuItem}">
+        <MenuItem Header="_Change Working Directory…" Command="{Binding ChangeWorkingDirectoryCommand}"/>
+        <Separator/>
+        <MenuItem Header="E_xit" Click="MenuExit_Click"/>
+      </MenuItem>
+      <!-- Conversation -->
+      <MenuItem Header="_Conversation" Style="{StaticResource TopLevelMenuItem}">
+        <MenuItem Header="_New" Command="{Binding NewConversationCommand}" InputGestureText="Ctrl+N"/>
+        <MenuItem Header="Rename _Current" Command="{Binding RenameCurrentConversationCommand}"/>
+        <MenuItem Header="_Search…" Command="{Binding FocusSearchCommand}" InputGestureText="Ctrl+F"/>
+      </MenuItem>
+      <!-- View -->
+      <MenuItem Header="_View" Style="{StaticResource TopLevelMenuItem}">
+        <MenuItem Header="Toggle _Sidebar" Command="{Binding ToggleSidebarCommand}" InputGestureText="Ctrl+B"/>
+        <Separator/>
+        <MenuItem Header="_Dark Theme" IsCheckable="True" IsChecked="{Binding IsDarkTheme}" Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
+        <MenuItem Header="_Light Theme" IsCheckable="True" IsChecked="{Binding IsLightTheme}" Command="{Binding SetThemeCommand}" CommandParameter="light"/>
+      </MenuItem>
+      <!-- Tools -->
+      <MenuItem Header="_Tools" Style="{StaticResource TopLevelMenuItem}">
+        <MenuItem Header="_Tool Access" Style="{StaticResource TopLevelMenuItem}">
+          <MenuItem Header="_Auto" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=auto}"
+                    Command="{Binding SetToolProfileMenuCommand}" CommandParameter="auto"/>
+          <MenuItem Header="_Full" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=full}"
+                    Command="{Binding SetToolProfileMenuCommand}" CommandParameter="full"/>
+          <MenuItem Header="_Restricted" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=restricted}"
+                    Command="{Binding SetToolProfileMenuCommand}" CommandParameter="restricted"/>
+        </MenuItem>
+        <MenuItem Header="_Reconnect" Command="{Binding ReconnectCommand}"/>
+        <Separator/>
+        <MenuItem Header="Open _Settings" Click="MenuOpenSettings_Click"/>
+      </MenuItem>
+      <!-- Help -->
+      <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItem}">
+        <MenuItem Header="_Commands" Command="{Binding ShowHelpCommand}"/>
+        <MenuItem Header="About DevMX" Command="{Binding ShowAboutCommand}"/>
+      </MenuItem>
+    </Menu>
+
+    <!-- ===== RAIL (far left, row 1) ===== -->
+    <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource PanelBackground}"
             BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
       <Grid>
         <!-- Collapsed rail (44px wide, icon buttons) -->
@@ -411,7 +464,7 @@
     </Border>
 
     <!-- ===== CONTENT COLUMN ===== -->
-    <Grid Grid.Column="1">
+    <Grid Grid.Row="1" Grid.Column="1">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*"/>
         <ColumnDefinition Width="6"/>
@@ -652,7 +705,7 @@
        </Grid>
 
         <!-- Status bar (spans both columns) -->
-        <StatusBar Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Height="32" Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource ForegroundBrush}">
+        <StatusBar Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Height="32" Background="{DynamicResource PanelBackground}" Foreground="{DynamicResource ForegroundBrush}">
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>

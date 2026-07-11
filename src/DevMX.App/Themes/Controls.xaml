@@ -225,4 +225,150 @@
     </Style.Triggers>
   </Style>
 
+  <!-- ===== MENU / MENUITEM ===== -->
+  <Style x:Key="MenuBorderStyle" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="2,4"/>
+  </Style>
+
+  <Style TargetType="Menu">
+    <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+    <Setter Property="Padding" Value="4,2"/>
+  </Style>
+
+  <Style TargetType="MenuItem">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Grid>
+            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Check mark for checkable items -->
+                <TextBlock Grid.Column="0" Text="✓" FontSize="11" Margin="0,0,6,0"
+                           Foreground="{DynamicResource ForegroundBrush}"
+                           Visibility="{TemplateBinding IsChecked, Converter={StaticResource BoolVis}}"/>
+                <!-- Header (with access key support) -->
+                <ContentPresenter Grid.Column="1"
+                                  ContentSource="Header"
+                                  RecognizesAccessKey="True"
+                                  VerticalAlignment="Center"/>
+                <!-- Submenu arrow -->
+                <TextBlock Grid.Column="2" Text="▶" FontSize="9" Margin="8,0,0,0"
+                           Foreground="{DynamicResource DimBrush}"
+                           Visibility="{TemplateBinding HasItems, Converter={StaticResource BoolVis}}"/>
+              </Grid>
+            </Border>
+            <!-- Submenu popup with dark background -->
+            <Popup x:Name="SubMenuPopup"
+                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                   Placement="Bottom"
+                   HorizontalOffset="2"
+                   AllowsTransparency="True"
+                   Focusable="False">
+              <Border Background="{DynamicResource PanelBackground}"
+                      BorderBrush="{DynamicResource BorderBrush}"
+                      BorderThickness="1"
+                      Padding="2,4"
+                      CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                  <ItemsPresenter/>
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+              <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource InputBackground}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Top-level menu items (menu bar items — no check mark, no submenu arrow) -->
+  <Style x:Key="TopLevelMenuItem" TargetType="MenuItem">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Grid>
+            <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                    Padding="{TemplateBinding Padding}"
+                    SnapsToDevicePixels="True">
+              <ContentPresenter ContentSource="Header"
+                                RecognizesAccessKey="True"
+                                VerticalAlignment="Center"/>
+            </Border>
+            <!-- Submenu popup with dark background -->
+            <Popup x:Name="SubMenuPopup"
+                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                   Placement="Bottom"
+                   HorizontalOffset="2"
+                   AllowsTransparency="True"
+                   Focusable="False">
+              <Border Background="{DynamicResource PanelBackground}"
+                      BorderBrush="{DynamicResource BorderBrush}"
+                      BorderThickness="1"
+                      Padding="2,4"
+                      CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                  <ItemsPresenter/>
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}"/>
+              <Setter Property="Foreground" Value="White"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource InputBackground}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- Separator in menus -->
+  <Style TargetType="Separator">
+    <Setter Property="Background" Value="{DynamicResource BorderBrush}"/>
+    <Setter Property="Height" Value="1"/>
+    <Setter Property="Margin" Value="4,2"/>
+  </Style>
+
 </ResourceDictionary>

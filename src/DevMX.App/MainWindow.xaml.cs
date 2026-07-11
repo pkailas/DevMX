@@ -72,6 +72,13 @@ public partial class MainWindow : Window
 
         // Hook window close for cleanup
         Closing += OnWindowClosing;
+
+        // Hook focus search request from ViewModel (menu / Ctrl+F)
+        vm.OnRequestFocusSearch += () =>
+        {
+            Dispatcher.BeginInvoke(new Action(() => SearchTextBox?.Focus()),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        };
     }
 
     private bool _closeCompleted;
@@ -210,6 +217,21 @@ public partial class MainWindow : Window
     {
         Vm.IsSidebarExpanded = true;
         // Let layout run, then bring the settings section into view.
+        Dispatcher.BeginInvoke(new Action(() => SettingsSection.BringIntoView()),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    // ===== Menu bar code-behind handlers =====
+
+    private void MenuExit_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void MenuOpenSettings_Click(object sender, RoutedEventArgs e)
+    {
+        // Reuse the same logic as RailSettingsBtn_Click
+        Vm.IsSidebarExpanded = true;
         Dispatcher.BeginInvoke(new Action(() => SettingsSection.BringIntoView()),
             System.Windows.Threading.DispatcherPriority.Loaded);
     }
