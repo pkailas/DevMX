@@ -265,9 +265,10 @@
           <!-- Conversation list -->
 <ListBox ItemsSource="{Binding Sidebar.Conversations}"
                     SelectedItem="{Binding Sidebar.SelectedConversation}"
-                    HorizontalAlignment="Left" Width="240"
+                    HorizontalAlignment="Stretch"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                     Margin="4,0" BorderThickness="0"
-                   SelectionChanged="ConversationListBox_SelectionChanged">
+                    SelectionChanged="ConversationListBox_SelectionChanged">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <Grid Margin="2,1">
