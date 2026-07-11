@@ -9,9 +9,18 @@ namespace DevMX.App.ViewModels;
 /// </summary>
 public partial class SettingsViewModel : ObservableObject
 {
-    private readonly DevMxSettings _settings;
     private readonly Action _onApply;
-    private readonly Action<string> _onThemeChanged;
+    private readonly Action<string>? _onThemeChanged;
+    private bool _initialized;
+
+    // Original values loaded at construction — used for merge-on-apply dirtiness tracking.
+    private string _originalEndpoint;
+    private string _originalModel;
+    private string _originalProvider;
+    private string _originalWorkDir;
+    private string _originalTheme;
+    private string _originalToolProfile;
+    private string _originalPollThrottleSeconds;
 
     [ObservableProperty]
     private string endpoint;
@@ -34,10 +43,22 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string pollThrottleSeconds;
 
-    public string ServerExe => _settings.ServerExe;
-    public string ApiKeySource => _settings.Provider == "anthropic"
-        ? "ANTHROPIC_API_KEY (environment variable)"
-        : "OPENAI_COMPAT_API_KEY (environment variable)";
+    // ===== Testable path-based constructor =====
+
+    /// <summary>Settings file path (for testability; uses default when null).</summary>
+    private string? _settingsPath;
+
+    public string ServerExe => DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath).ServerExe;
+    public string ApiKeySource
+    {
+        get
+        {
+            var settings = DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+            return settings.Provider == "anthropic"
+                ? "ANTHROPIC_API_KEY (environment variable)"
+                : "OPENAI_COMPAT_API_KEY (environment variable)";
+        }
+    }
 
     /// <summary>Available theme options for the ComboBox.</summary>
     public IEnumerable<string> ThemeOptions => new[] { "dark", "light" };
@@ -49,11 +70,28 @@ public partial class SettingsViewModel : ObservableObject
     /// <param name="settings">The DevMxSettings to edit.</param>
     /// <param name="onApply">Callback fired when Apply &amp; Reconnect is clicked.</param>
     /// <param name="onThemeChanged">Callback fired immediately when theme changes.</param>
-    public SettingsViewModel(DevMxSettings settings, Action onApply, Action<string> onThemeChanged = null!)
+    public SettingsViewModel(DevMxSettings settings, Action onApply, Action<string>? onThemeChanged = null)
+        : this(settings, onApply, onThemeChanged, null)
     {
-        _settings = settings;
+    }
+
+    /// <summary>Creates a SettingsViewModel with an injectable settings path (for testing).</summary>
+    public SettingsViewModel(DevMxSettings settings, Action onApply, Action<string>? onThemeChanged, string? settingsPath)
+    {
         _onApply = onApply;
         _onThemeChanged = onThemeChanged;
+        _settingsPath = settingsPath;
+
+        // Record original values for dirtiness tracking
+        _originalEndpoint = settings.Endpoint;
+        _originalModel = settings.Model;
+        _originalProvider = settings.Provider;
+        _originalWorkDir = settings.WorkDir;
+        _originalTheme = settings.Theme;
+        _originalToolProfile = settings.ToolProfile;
+        _originalPollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+
+        // Set VM fields (triggers OnPropertyChanged but persist handlers no-op until _initialized)
         Endpoint = settings.Endpoint;
         Model = settings.Model;
         Provider = settings.Provider;
@@ -61,51 +99,101 @@ public partial class SettingsViewModel : ObservableObject
         Theme = settings.Theme;
         ToolProfile = settings.ToolProfile;
         PollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+
+        _initialized = true;
     }
 
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
+        if (!_initialized)
+            return;
         if (e.PropertyName == nameof(Theme))
         {
             _onThemeChanged?.Invoke(Theme);
             // Persist theme immediately
-            _settings.Theme = Theme;
-            _settings.Save();
+            PersistTheme();
         }
     }
 
     [RelayCommand]
-    private void SetTheme(string themeName) => Theme = themeName;
+    private void SetTheme(string themeName)
+    {
+        Theme = themeName;
+        // Update original so it doesn't count as dirty on Apply
+        _originalTheme = Theme;
+    }
 
     [RelayCommand]
     private void SetToolProfile(string profileName)
     {
         ToolProfile = profileName;
         // Persist immediately
-        _settings.ToolProfile = ToolProfile;
-        _settings.Save();
+        PersistToolProfile();
+        // Update original so it doesn't count as dirty on Apply
+        _originalToolProfile = ToolProfile;
+    }
+
+    private void PersistTheme()
+    {
+        var settings = DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+        settings.Theme = Theme;
+        settings.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+    }
+
+    private void PersistToolProfile()
+    {
+        var settings = DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+        settings.ToolProfile = ToolProfile;
+        settings.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
     }
 
     [RelayCommand(CanExecute = nameof(CanApply))]
     private void Apply()
     {
-        // Persist changes to the backing settings object
-        _settings.Endpoint = Endpoint;
-        _settings.Model = Model;
-        _settings.Provider = Provider;
-        _settings.WorkDir = WorkDir;
-        _settings.Theme = Theme;
-        _settings.ToolProfile = ToolProfile;
+        // Reload fresh settings from disk
+        var fresh = DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
 
-        // Validate PollThrottleSeconds — ignore non-numeric input (revert to current)
+        // Merge: write VM value only if it differs from the original (user edited it this session)
+        // Otherwise keep the fresh-disk value.
+        fresh.Endpoint = (Endpoint != _originalEndpoint) ? Endpoint : fresh.Endpoint;
+        fresh.Model = (Model != _originalModel) ? Model : fresh.Model;
+        fresh.Provider = (Provider != _originalProvider) ? Provider : fresh.Provider;
+        fresh.WorkDir = (WorkDir != _originalWorkDir) ? WorkDir : fresh.WorkDir;
+        fresh.Theme = (Theme != _originalTheme) ? Theme : fresh.Theme;
+        fresh.ToolProfile = (ToolProfile != _originalToolProfile) ? ToolProfile : fresh.ToolProfile;
+
+        // Validate PollThrottleSeconds
         if (int.TryParse(PollThrottleSeconds, out int throttleVal))
         {
-            _settings.PollThrottleSeconds = throttleVal;
+            // Only apply if user changed it from original
+            fresh.PollThrottleSeconds = (PollThrottleSeconds != _originalPollThrottleSeconds)
+                ? throttleVal
+                : fresh.PollThrottleSeconds;
         }
-        // else: keep existing value (ignore/revert non-numeric)
+        // else: keep fresh disk value
 
-        _settings.Save();
+        // Save the merged settings
+        fresh.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+
+        // Refresh VM fields + originals from the merged result
+        Endpoint = fresh.Endpoint;
+        Model = fresh.Model;
+        Provider = fresh.Provider;
+        WorkDir = fresh.WorkDir;
+        Theme = fresh.Theme;
+        ToolProfile = fresh.ToolProfile;
+        PollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+
+        // Update originals to match the merged result (so subsequent Apply is idempotent)
+        _originalEndpoint = fresh.Endpoint;
+        _originalModel = fresh.Model;
+        _originalProvider = fresh.Provider;
+        _originalWorkDir = fresh.WorkDir;
+        _originalTheme = fresh.Theme;
+        _originalToolProfile = fresh.ToolProfile;
+        _originalPollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+
         _onApply();
     }
 

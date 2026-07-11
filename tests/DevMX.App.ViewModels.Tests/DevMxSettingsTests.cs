@@ -121,22 +121,34 @@ public class DevMxSettingsTests
     [Fact]
     public void SettingsViewModel_ChangingTheme_RaisesCallback()
     {
-        // Arrange
-        var settings = new DevMxSettings { Theme = "dark" };
-        string? capturedTheme = null;
-        var vm = new SettingsViewModel(settings, () => { }, theme => capturedTheme = theme);
+        // Arrange — use injectable path so we can verify file persist
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_theme_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { Theme = "dark" };
+            settings.Save(tempPath);
 
-        // Constructor sets Theme = settings.Theme, which triggers the callback
-        Assert.Equal("dark", vm.Theme);
-        Assert.Equal("dark", capturedTheme); // callback fired during construction
+            string? capturedTheme = null;
+            var vm = new SettingsViewModel(settings, () => { }, theme => capturedTheme = theme, tempPath);
 
-        // Act - change to light
-        vm.Theme = "light";
+            // Constructor does NOT fire callback (FIX 2: no ctor side-effect)
+            Assert.Equal("dark", vm.Theme);
+            Assert.Null(capturedTheme); // callback suppressed during construction
 
-        // Assert
-        Assert.Equal("light", vm.Theme);
-        Assert.Equal("light", capturedTheme); // callback fired with new value
-        Assert.Equal("light", settings.Theme); // persisted immediately
+            // Act - change to light
+            vm.Theme = "light";
+
+            // Assert
+            Assert.Equal("light", vm.Theme);
+            Assert.Equal("light", capturedTheme); // callback fired with new value
+            // Verify persisted to file
+            var reloaded = DevMxSettings.Load(tempPath);
+            Assert.Equal("light", reloaded.Theme);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
     }
 
     [Fact]
@@ -161,15 +173,26 @@ public class DevMxSettingsTests
     [Fact]
     public void SettingsViewModel_ToolProfile_RoundTrip()
     {
-        var settings = new DevMxSettings { ToolProfile = "restricted" };
-        var vm = new SettingsViewModel(settings, () => { });
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_profile_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { ToolProfile = "restricted" };
+            settings.Save(tempPath);
+            var vm = new SettingsViewModel(settings, () => { }, null, tempPath);
 
-        Assert.Equal("restricted", vm.ToolProfile);
+            Assert.Equal("restricted", vm.ToolProfile);
 
-        // Change via command
-        vm.SetToolProfileCommand.Execute("full");
-        Assert.Equal("full", vm.ToolProfile);
-        Assert.Equal("full", settings.ToolProfile); // persisted immediately
+            // Change via command
+            vm.SetToolProfileCommand.Execute("full");
+            Assert.Equal("full", vm.ToolProfile);
+            // Verify persisted to file
+            var reloaded = DevMxSettings.Load(tempPath);
+            Assert.Equal("full", reloaded.ToolProfile);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
     }
 
     [Fact]
@@ -331,32 +354,225 @@ public class DevMxSettingsTests
     [Fact]
     public void SettingsViewModel_PollThrottleSeconds_NonNumericRevertsOnApply()
     {
-        var settings = new DevMxSettings { PollThrottleSeconds = 5 };
-        bool applied = false;
-        var vm = new SettingsViewModel(settings, () => applied = true);
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_poll_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { PollThrottleSeconds = 5 };
+            settings.Save(tempPath);
+            bool applied = false;
+            var vm = new SettingsViewModel(settings, () => applied = true, null, tempPath);
 
-        Assert.Equal("5", vm.PollThrottleSeconds);
+            Assert.Equal("5", vm.PollThrottleSeconds);
 
-        // Set non-numeric value
-        vm.PollThrottleSeconds = "abc";
-        vm.ApplyCommand.Execute(null);
+            // Set non-numeric value
+            vm.PollThrottleSeconds = "abc";
+            vm.ApplyCommand.Execute(null);
 
-        Assert.True(applied);
-        // Should keep existing value (5) since "abc" is not valid
-        Assert.Equal(5, settings.PollThrottleSeconds);
+            Assert.True(applied);
+            // Should keep disk value (5) since "abc" is not valid
+            var reloaded = DevMxSettings.Load(tempPath);
+            Assert.Equal(5, reloaded.PollThrottleSeconds);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
     }
 
     [Fact]
     public void SettingsViewModel_PollThrottleSeconds_ValidIntegerPersists()
     {
-        var settings = new DevMxSettings { PollThrottleSeconds = 5 };
-        bool applied = false;
-        var vm = new SettingsViewModel(settings, () => applied = true);
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_poll_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { PollThrottleSeconds = 5 };
+            settings.Save(tempPath);
+            bool applied = false;
+            var vm = new SettingsViewModel(settings, () => applied = true, null, tempPath);
 
-        vm.PollThrottleSeconds = "10";
-        vm.ApplyCommand.Execute(null);
+            vm.PollThrottleSeconds = "10";
+            vm.ApplyCommand.Execute(null);
 
-        Assert.True(applied);
-        Assert.Equal(10, settings.PollThrottleSeconds);
+            Assert.True(applied);
+            var reloaded = DevMxSettings.Load(tempPath);
+            Assert.Equal(10, reloaded.PollThrottleSeconds);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
+    // ===== FIX 1: Merge-on-apply tests =====
+
+    [Fact]
+    public void SettingsViewModel_MergeOnApply_UneditedFieldsKeepDiskValues()
+    {
+        // Construct VM from settings A; simulate disk change to B; user edits ONLY poll;
+        // Apply → merged file has B's endpoint/model + user's poll.
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_merge_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            // Settings A: initial values
+            var settingsA = new DevMxSettings
+            {
+                Endpoint = "http://a:8080/v1",
+                Model = "model-a",
+                Provider = "openai",
+                WorkDir = @"C:\work-a",
+                Theme = "dark",
+                ToolProfile = "auto",
+                PollThrottleSeconds = 5
+            };
+            settingsA.Save(tempPath);
+
+            // Create VM from settings A
+            var vm = new SettingsViewModel(settingsA, () => { }, null, tempPath);
+            Assert.Equal("http://a:8080/v1", vm.Endpoint);
+            Assert.Equal("5", vm.PollThrottleSeconds);
+
+            // Simulate external disk change to settings B (e.g., another session edited the file)
+            var settingsB = new DevMxSettings
+            {
+                Endpoint = "http://b:9090/v1",
+                Model = "model-b",
+                Provider = "anthropic",
+                WorkDir = @"C:\work-b",
+                Theme = "light",
+                ToolProfile = "full",
+                PollThrottleSeconds = 10
+            };
+            settingsB.Save(tempPath);
+
+            // User edits ONLY poll in the VM
+            vm.PollThrottleSeconds = "15";
+
+            // Apply
+            vm.ApplyCommand.Execute(null);
+
+            // Verify merged result: B's endpoint/model, user's poll
+            var merged = DevMxSettings.Load(tempPath);
+            Assert.Equal("http://b:9090/v1", merged.Endpoint);  // from disk (B)
+            Assert.Equal("model-b", merged.Model);               // from disk (B)
+            Assert.Equal("anthropic", merged.Provider);           // from disk (B)
+            Assert.Equal(@"C:\work-b", merged.WorkDir);           // from disk (B)
+            Assert.Equal("light", merged.Theme);                  // from disk (B)
+            Assert.Equal("full", merged.ToolProfile);             // from disk (B)
+            Assert.Equal(15, merged.PollThrottleSeconds);         // user's edit
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SettingsViewModel_DirtyFieldWinsOverDisk()
+    {
+        // User edits endpoint too → user's endpoint survives over B's.
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_dirty_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settingsA = new DevMxSettings
+            {
+                Endpoint = "http://a:8080/v1",
+                Model = "model-a",
+                PollThrottleSeconds = 5
+            };
+            settingsA.Save(tempPath);
+
+            var vm = new SettingsViewModel(settingsA, () => { }, null, tempPath);
+
+            // Simulate disk change
+            var settingsB = new DevMxSettings
+            {
+                Endpoint = "http://b:9090/v1",
+                Model = "model-b",
+                PollThrottleSeconds = 10
+            };
+            settingsB.Save(tempPath);
+
+            // User edits endpoint AND poll
+            vm.Endpoint = "http://user:7070/v1";
+            vm.PollThrottleSeconds = "20";
+
+            vm.ApplyCommand.Execute(null);
+
+            var merged = DevMxSettings.Load(tempPath);
+            Assert.Equal("http://user:7070/v1", merged.Endpoint);  // user's dirty value wins
+            Assert.Equal("model-b", merged.Model);                  // from disk (B), not edited
+            Assert.Equal(20, merged.PollThrottleSeconds);           // user's edit
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
+    // ===== FIX 2: No ctor side-effect save test =====
+
+    [Fact]
+    public void SettingsViewModel_NoSaveDuringConstruction()
+    {
+        // Constructing a VM does not write the file.
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_nosave_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { Theme = "dark", PollThrottleSeconds = 5 };
+            settings.Save(tempPath);
+
+            // Record file content/mtime before construction
+            var beforeContent = File.ReadAllText(tempPath);
+            var beforeTime = File.GetLastWriteTime(tempPath);
+
+            // Small delay to detect any write
+            Thread.Sleep(10);
+
+            bool callbackFired = false;
+            var vm = new SettingsViewModel(settings, () => { }, theme => callbackFired = true, tempPath);
+
+            // Assert: callback did NOT fire during construction
+            Assert.False(callbackFired);
+
+            // Assert: file was NOT modified during construction
+            var afterContent = File.ReadAllText(tempPath);
+            var afterTime = File.GetLastWriteTime(tempPath);
+            Assert.Equal(beforeContent, afterContent);
+            Assert.Equal(beforeTime, afterTime);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
+    }
+
+    // ===== Immediate persist still works post-init =====
+
+    [Fact]
+    public void SettingsViewModel_ImmediatePersistWorksPostInit()
+    {
+        // After construction, SetTheme/SetToolProfile still persist immediately.
+        string tempPath = Path.Combine(Path.GetTempPath(), $"devmx_persist_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var settings = new DevMxSettings { Theme = "dark", ToolProfile = "auto" };
+            settings.Save(tempPath);
+
+            var vm = new SettingsViewModel(settings, () => { }, null, tempPath);
+
+            // SetTheme persists immediately
+            vm.SetThemeCommand.Execute("light");
+            var afterTheme = DevMxSettings.Load(tempPath);
+            Assert.Equal("light", afterTheme.Theme);
+
+            // SetToolProfile persists immediately
+            vm.SetToolProfileCommand.Execute("full");
+            var afterProfile = DevMxSettings.Load(tempPath);
+            Assert.Equal("full", afterProfile.ToolProfile);
+        }
+        finally
+        {
+            try { File.Delete(tempPath); } catch { }
+        }
     }
 }

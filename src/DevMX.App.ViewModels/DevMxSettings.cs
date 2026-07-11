@@ -25,7 +25,11 @@ public sealed record DevMxSettings
 
     public static DevMxSettings Load()
     {
-        string path = DefaultSettingsPath;
+        return Load(DefaultSettingsPath);
+    }
+
+    public static DevMxSettings Load(string path)
+    {
         if (File.Exists(path))
         {
             try
@@ -45,7 +49,11 @@ public sealed record DevMxSettings
 
     public void Save()
     {
-        string path = DefaultSettingsPath;
+        Save(DefaultSettingsPath);
+    }
+
+    public void Save(string path)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var json = JsonSerializer.Serialize(this, Options);
         File.WriteAllText(path, json);
