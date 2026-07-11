@@ -1,4 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using System.Collections.ObjectModel;
 
 namespace DevMX.App.ViewModels;
 
@@ -12,6 +14,12 @@ public partial class ChatEntryViewModel : ObservableObject
 
     [ObservableProperty]
     private string? filePath;
+
+    /// <summary>Children collection for ToolSummary entries (collapsed tool entries).</summary>
+    public ObservableCollection<ChatEntryViewModel> Children { get; } = new();
+
+    [ObservableProperty]
+    private bool isExpanded;
 
     /// <summary>True when this is a Tool entry with a clickable file path.</summary>
     public bool IsClickable => Kind == ChatEntryKind.Tool && FilePath != null;
@@ -33,5 +41,12 @@ public partial class ChatEntryViewModel : ObservableObject
     public void SetText(string newText)
     {
         Text = newText;
+    }
+
+    /// <summary>Toggles the expanded/collapsed state for ToolSummary entries.</summary>
+    [RelayCommand]
+    private void ToggleExpanded()
+    {
+        IsExpanded = !IsExpanded;
     }
 }

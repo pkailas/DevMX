@@ -13,6 +13,7 @@ public partial class SidebarViewModel : ObservableObject
     private readonly Action<Action> _dispatch;
     private readonly Action _clearChatEntries;
     private bool _isTitled;
+    private bool _isSwitchingConversation; // re-entrancy guard
 
     // Search state
     private CancellationTokenSource? _searchCts;
@@ -115,154 +116,169 @@ public partial class SidebarViewModel : ObservableObject
         if (!_session.IsInitialized)
             return;
 
-        long id = item.Id;
-
-        // Check provider match via store
-        var summaries = await _session.Store!.ListConversationsAsync();
-        var summary = summaries.FirstOrDefault(s => s.Id == id);
-        if (summary == null)
+        if (_isSwitchingConversation)
             return;
-
-        string activeProvider = _session.Provider?.ProviderName ?? "openai";
-
-        if (summary.Provider != activeProvider)
-        {
-            _dispatch(() => _clearChatEntries());
-            OnProviderMismatch?.Invoke(id, summary.Provider);
-            return;
-        }
-
-        // Provider matches — open the conversation
+        _isSwitchingConversation = true;
         try
         {
-            await _session.OpenConversationAsync(id);
-            _dispatch(() =>
-            {
-                _clearChatEntries();
-                _isTitled = !item.Title.StartsWith("Session ");
-            });
+            long id = item.Id;
 
-            // Load history entries into the chat
-            var messages = await _session.Store!.GetMessagesAsync(id);
-            var entries = new List<ChatEntryViewModel>();
-            foreach (var msg in messages)
+            // Check provider match via store
+            var summaries = await _session.Store!.ListConversationsAsync();
+            var summary = summaries.FirstOrDefault(s => s.Id == id);
+            if (summary == null)
+                return;
+
+            string activeProvider = _session.Provider?.ProviderName ?? "openai";
+
+            if (summary.Provider != activeProvider)
             {
-                try
+                _dispatch(() => _clearChatEntries());
+                OnProviderMismatch?.Invoke(id, summary.Provider);
+                return;
+            }
+
+            // Provider matches — open the conversation
+            try
+            {
+                await _session.OpenConversationAsync(id);
+                _dispatch(() =>
                 {
-                    var content = JsonNode.Parse(msg.ContentJson);
-                    if (content == null) continue;
+                    _clearChatEntries();
+                    _isTitled = !item.Title.StartsWith("Session ");
+                    SelectedConversation = item;
+                    OnClearProviderMismatch?.Invoke();
+                });
 
-                    if (msg.Role == "user")
+                // Load history entries into the chat
+                var messages = await _session.Store!.GetMessagesAsync(id);
+                var entries = new List<ChatEntryViewModel>();
+                foreach (var msg in messages)
+                {
+                    try
                     {
-                        string? text = ExtractTextFromContent(content);
-                        if (!string.IsNullOrEmpty(text))
-                            entries.Add(new ChatEntryViewModel(ChatEntryKind.User, text));
-                    }
-                    else if (msg.Role == "assistant")
-                    {
-                        if (content is JsonObject obj && obj["content"] is JsonArray contentArr)
+                        var content = JsonNode.Parse(msg.ContentJson);
+                        if (content == null) continue;
+
+                        if (msg.Role == "user")
                         {
-                            bool hasToolCalls = false;
-                            bool hasText = false;
-                            foreach (var block in contentArr)
+                            string? text = ExtractTextFromContent(content);
+                            if (!string.IsNullOrEmpty(text))
+                                entries.Add(new ChatEntryViewModel(ChatEntryKind.User, text));
+                        }
+                        else if (msg.Role == "assistant")
+                        {
+                            if (content is JsonObject obj && obj["content"] is JsonArray contentArr)
                             {
-                                if (block is JsonObject blockObj)
+                                bool hasToolCalls = false;
+                                bool hasText = false;
+                                foreach (var block in contentArr)
                                 {
-                                    string? type = blockObj["type"]?.GetValue<string>();
-                                    if (type == "tool_use")
+                                    if (block is JsonObject blockObj)
                                     {
-                                        hasToolCalls = true;
-                                        string name = blockObj["name"]?.GetValue<string>() ?? "unknown";
-                                        string argsJson = blockObj["input"]?.ToJsonString() ?? "{}";
-                                        string argTrunc = argsJson.Length > 120 ? argsJson[..120] + "\u2026" : argsJson;
-
-                                        // Collapse consecutive devmind_task_status for same job_id in history
-                                        if (name == "devmind_task_status" && entries.Count > 0)
+                                        string? type = blockObj["type"]?.GetValue<string>();
+                                        if (type == "tool_use")
                                         {
-                                            var lastEntry = entries[^1];
-                                            if (lastEntry.Kind == ChatEntryKind.Tool && lastEntry.Text.StartsWith("[tool] devmind_task_status("))
+                                            hasToolCalls = true;
+                                            string name = blockObj["name"]?.GetValue<string>() ?? "unknown";
+                                            string argsJson = blockObj["input"]?.ToJsonString() ?? "{}";
+                                            string argTrunc = argsJson.Length > 120 ? argsJson[..120] + "\u2026" : argsJson;
+
+                                            // Collapse consecutive devmind_task_status for same job_id in history
+                                            if (name == "devmind_task_status" && entries.Count > 0)
                                             {
-                                                string? newJobId = ExtractJobIdFromJson(argsJson);
-                                                string? lastJobId = ExtractJobIdFromEntryText(lastEntry.Text);
-                                                if (newJobId != null && lastJobId != null && newJobId == lastJobId)
+                                                var lastEntry = entries[^1];
+                                                if (lastEntry.Kind == ChatEntryKind.Tool && lastEntry.Text.StartsWith("[tool] devmind_task_status("))
                                                 {
-                                                    // Increment collapse count
-                                                    string currentText = lastEntry.Text;
-                                                    int multiplyIdx = currentText.LastIndexOf("\u00d7");
-                                                    if (multiplyIdx >= 0)
+                                                    string? newJobId = ExtractJobIdFromJson(argsJson);
+                                                    string? lastJobId = ExtractJobIdFromEntryText(lastEntry.Text);
+                                                    if (newJobId != null && lastJobId != null && newJobId == lastJobId)
                                                     {
-                                                        int countStart = multiplyIdx + 1;
-                                                        if (int.TryParse(currentText[countStart..], out int count))
+                                                        // Increment collapse count
+                                                        string currentText = lastEntry.Text;
+                                                        int multiplyIdx = currentText.LastIndexOf("\u00d7");
+                                                        if (multiplyIdx >= 0)
                                                         {
-                                                            lastEntry.SetText(currentText[..countStart] + (count + 1));
+                                                            int countStart = multiplyIdx + 1;
+                                                            if (int.TryParse(currentText[countStart..], out int count))
+                                                            {
+                                                                lastEntry.SetText(currentText[..countStart] + (count + 1));
+                                                            }
+                                                            else
+                                                            {
+                                                                lastEntry.SetText(currentText[..countStart] + "2");
+                                                            }
                                                         }
                                                         else
                                                         {
-                                                            lastEntry.SetText(currentText[..countStart] + "2");
+                                                            lastEntry.SetText(lastEntry.Text + " \u00d72");
                                                         }
+                                                        continue;
                                                     }
-                                                    else
-                                                    {
-                                                        lastEntry.SetText(lastEntry.Text + " \u00d72");
-                                                    }
-                                                    continue;
                                                 }
                                             }
-                                        }
 
-                                        entries.Add(new ChatEntryViewModel(ChatEntryKind.Tool, $"[tool] {name}({argTrunc})"));
-                                    }
-                                    else if (type == "text")
-                                    {
-                                        hasText = true;
-                                        string? text = blockObj["text"]?.GetValue<string>();
-                                        if (!string.IsNullOrEmpty(text))
-                                            entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, text));
+                                            entries.Add(new ChatEntryViewModel(ChatEntryKind.Tool, $"[tool] {name}({argTrunc})"));
+                                        }
+                                        else if (type == "text")
+                                        {
+                                            hasText = true;
+                                            string? text = blockObj["text"]?.GetValue<string>();
+                                            if (!string.IsNullOrEmpty(text))
+                                                entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, text));
+                                        }
                                     }
                                 }
+                                if (!hasToolCalls && !hasText)
+                                {
+                                    string? text = ExtractTextFromContent(content);
+                                    if (!string.IsNullOrEmpty(text))
+                                        entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, text));
+                                }
                             }
-                            if (!hasToolCalls && !hasText)
+                            else
                             {
                                 string? text = ExtractTextFromContent(content);
                                 if (!string.IsNullOrEmpty(text))
                                     entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, text));
                             }
                         }
-                        else
-                        {
-                            string? text = ExtractTextFromContent(content);
-                            if (!string.IsNullOrEmpty(text))
-                                entries.Add(new ChatEntryViewModel(ChatEntryKind.Assistant, text));
-                        }
+                        // Skip "tool" role messages (plumbing)
                     }
-                    // Skip "tool" role messages (plumbing)
+                    catch
+                    {
+                        // Malformed/unexpected shapes: skip silently
+                    }
                 }
-                catch
+
+                // Collapse consecutive tool rounds into summary entries
+                var collapsedEntries = ChatViewModel.CollapseToolRounds(entries);
+
+                _dispatch(() =>
                 {
-                    // Malformed/unexpected shapes: skip silently
+                    foreach (var entry in collapsedEntries)
+                        OnAddEntry?.Invoke(entry);
+                });
+
+                // Load delegations for the task monitor
+                try
+                {
+                    var delegations = await _session.Store!.GetDelegationsAsync(id);
+                    OnDelegationsLoaded?.Invoke(delegations);
                 }
-            }
-
-            _dispatch(() =>
-            {
-                foreach (var entry in entries)
-                    OnAddEntry?.Invoke(entry);
-            });
-
-            // Load delegations for the task monitor
-            try
-            {
-                var delegations = await _session.Store!.GetDelegationsAsync(id);
-                OnDelegationsLoaded?.Invoke(delegations);
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SidebarViewModel] GetDelegations failed: {ex.Message}");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[SidebarViewModel] GetDelegations failed: {ex.Message}");
+                Console.WriteLine($"[SidebarViewModel] OpenConversation failed: {ex.Message}");
             }
         }
-        catch (Exception ex)
+        finally
         {
-            Console.WriteLine($"[SidebarViewModel] OpenConversation failed: {ex.Message}");
+            _isSwitchingConversation = false;
         }
     }
 

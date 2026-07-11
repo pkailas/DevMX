@@ -114,6 +114,72 @@
       </Border>
     </DataTemplate>
 
+    <DataTemplate x:Key="ToolSummaryEntryTemplate">
+      <StackPanel>
+        <!-- Toggle header row -->
+        <ToggleButton IsChecked="{Binding IsExpanded, Mode=OneWay}"
+                      Background="Transparent" BorderThickness="0"
+                      Padding="6,3" Cursor="Hand" HorizontalAlignment="Stretch">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto"/>
+              <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="{Binding IsExpanded, Converter={StaticResource EnumToBool}, ConverterParameter=collapsed}"
+                       FontFamily="{DynamicResource MonospaceFontFamily}"
+                       Foreground="{DynamicResource DimBrush}"
+                       Margin="0,0,4,0"
+                       Visibility="Collapsed">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsExpanded, Mode=OneWay}" Value="True">
+                      <Setter Property="Visibility" Value="Visible"/>
+                      <Setter Property="Text" Value="▾"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <TextBlock Grid.Column="0"
+                       Text="▸"
+                       FontFamily="{DynamicResource MonospaceFontFamily}"
+                       Foreground="{DynamicResource DimBrush}"
+                       Margin="0,0,4,0">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsExpanded, Mode=OneWay}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <TextBlock Grid.Column="1"
+                       Text="{Binding Text, Mode=OneWay}"
+                       FontFamily="{DynamicResource MonospaceFontFamily}"
+                       Foreground="{DynamicResource DimBrush}"
+                       VerticalAlignment="Center"/>
+          </Grid>
+        </ToggleButton>
+        <!-- Collapsed children (visible when expanded) -->
+        <ItemsControl ItemsSource="{Binding Children}"
+                      Visibility="Collapsed">
+          <ItemsControl.Style>
+            <Style TargetType="ItemsControl">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsExpanded, Mode=OneWay}" Value="True">
+                  <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </ItemsControl.Style>
+        </ItemsControl>
+      </StackPanel>
+    </DataTemplate>
+
     <!-- Selector for chat entry kind -->
     <DataTemplate DataType="{x:Type vm:ChatEntryViewModel}">
       <ContentControl>
@@ -132,6 +198,9 @@
               </DataTrigger>
               <DataTrigger Binding="{Binding Kind}" Value="Info">
                 <Setter Property="ContentTemplate" Value="{StaticResource InfoEntryTemplate}"/>
+              </DataTrigger>
+              <DataTrigger Binding="{Binding Kind}" Value="ToolSummary">
+                <Setter Property="ContentTemplate" Value="{StaticResource ToolSummaryEntryTemplate}"/>
               </DataTrigger>
             </Style.Triggers>
           </Style>

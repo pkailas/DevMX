@@ -205,6 +205,166 @@ public partial class ChatViewModel : ObservableObject
         Entries.Clear();
     }
 
+    /// <summary>
+    /// Collapses consecutive Tool entries at the end of the Entries collection into a single ToolSummary entry.
+    /// Only collapses if there are 2+ consecutive Tool entries (single tool lines are left as-is).
+    /// The round is scanned backwards from the end, stopping at non-Tool entries.
+    /// </summary>
+    internal void CollapseToolRound()
+    {
+        if (Entries.Count < 2)
+            return;
+
+        // Find the run of consecutive Tool entries at the end
+        int lastToolIndex = Entries.Count - 1;
+        while (lastToolIndex >= 0 && Entries[lastToolIndex].Kind == ChatEntryKind.Tool)
+            lastToolIndex--;
+
+        int firstToolIndex = lastToolIndex + 1;
+        int toolCount = Entries.Count - 1 - firstToolIndex + 1; // = Entries.Count - 1 - firstToolIndex + 1
+
+        // Do not collapse a single tool line
+        if (toolCount <= 1)
+            return;
+
+        // Collect tool entries
+        var toolEntries = new List<ChatEntryViewModel>();
+        for (int i = firstToolIndex; i < Entries.Count; i++)
+        {
+            toolEntries.Add(Entries[i]);
+        }
+
+        // Build summary header: group by tool name, order of first occurrence, "xN" only when N>1
+        var toolCounts = new System.Collections.Generic.Dictionary<string, int>();
+        var toolOrder = new List<string>();
+        foreach (var entry in toolEntries)
+        {
+            // Extract tool name from "[tool] name(args)" format
+            string text = entry.Text;
+            string toolName = "unknown";
+            int afterBracket = text.IndexOf("] ") + 2;
+            if (afterBracket > 1 && afterBracket < text.Length)
+            {
+                int parenIdx = text.IndexOf('(', afterBracket);
+                toolName = parenIdx > afterBracket ? text.Substring(afterBracket, parenIdx - afterBracket) : text.Substring(afterBracket).TrimEnd(')');
+            }
+
+            if (!toolCounts.ContainsKey(toolName))
+            {
+                toolCounts[toolName] = 0;
+                toolOrder.Add(toolName);
+            }
+            toolCounts[toolName]++;
+        }
+
+        var parts = new List<string>();
+        foreach (var name in toolOrder)
+        {
+            int count = toolCounts[name];
+            parts.Add(count > 1 ? $"{name} ×{count}" : name);
+        }
+
+        string headerText = $"[tool] used {string.Join(", ", (IEnumerable<string>)parts)}";
+
+        // Create the summary entry
+        var summary = new ChatEntryViewModel(ChatEntryKind.ToolSummary, headerText);
+        foreach (var child in toolEntries)
+        {
+            summary.Children.Add(child);
+        }
+
+        // Remove the individual tool entries and insert the summary
+        for (int i = 0; i < toolCount; i++)
+        {
+            Entries.RemoveAt(Entries.Count - 1);
+        }
+        Entries.Insert(firstToolIndex, summary);
+    }
+
+    /// <summary>
+    /// Overload for history reload: takes a list of entries and returns a new list with tool rounds collapsed.
+    /// </summary>
+    internal static List<ChatEntryViewModel> CollapseToolRounds(List<ChatEntryViewModel> entries)
+    {
+        var result = new List<ChatEntryViewModel>();
+        var pendingTools = new List<ChatEntryViewModel>();
+
+        foreach (var entry in entries)
+        {
+            if (entry.Kind == ChatEntryKind.Tool)
+            {
+                pendingTools.Add(entry);
+            }
+            else
+            {
+                // Flush pending tools if there are 2+
+                if (pendingTools.Count >= 2)
+                {
+                    result.Add(CreateToolSummary(pendingTools));
+                }
+                else if (pendingTools.Count == 1)
+                {
+                    result.Add(pendingTools[0]);
+                }
+                pendingTools.Clear();
+                result.Add(entry);
+            }
+        }
+
+        // Flush remaining tools at end
+        if (pendingTools.Count >= 2)
+        {
+            result.Add(CreateToolSummary(pendingTools));
+        }
+        else if (pendingTools.Count == 1)
+        {
+            result.Add(pendingTools[0]);
+        }
+
+        return result;
+    }
+
+    private static ChatEntryViewModel CreateToolSummary(List<ChatEntryViewModel> toolEntries)
+    {
+        var toolCounts = new System.Collections.Generic.Dictionary<string, int>();
+        var toolOrder = new List<string>();
+
+        foreach (var entry in toolEntries)
+        {
+            string text = entry.Text;
+            string toolName = "unknown";
+            int afterBracket = text.IndexOf("] ") + 2;
+            if (afterBracket > 1 && afterBracket < text.Length)
+            {
+                int parenIdx = text.IndexOf('(', afterBracket);
+                toolName = parenIdx > afterBracket ? text.Substring(afterBracket, parenIdx - afterBracket) : text.Substring(afterBracket).TrimEnd(')');
+            }
+
+            if (!toolCounts.ContainsKey(toolName))
+            {
+                toolCounts[toolName] = 0;
+                toolOrder.Add(toolName);
+            }
+            toolCounts[toolName]++;
+        }
+
+        var parts = new List<string>();
+        foreach (var name in toolOrder)
+        {
+            int count = toolCounts[name];
+            parts.Add(count > 1 ? $"{name} ×{count}" : name);
+        }
+
+        string headerText = $"[tool] used {string.Join(", ", (IEnumerable<string>)parts)}";
+
+        var summary = new ChatEntryViewModel(ChatEntryKind.ToolSummary, headerText);
+        foreach (var child in toolEntries)
+        {
+            summary.Children.Add(child);
+        }
+        return summary;
+    }
+
     internal void ShowProviderMismatchInfo(long conversationId, string providerName)
     {
         _dispatch(() =>
@@ -282,6 +442,13 @@ public partial class ChatViewModel : ObservableObject
                 {
                     _dispatch(() =>
                     {
+                        // If the last entry is a Tool (or ToolSummary), a tool round has ended.
+                        // Collapse consecutive Tool entries before adding assistant text.
+                        if (Entries.Count > 0 && Entries[^1].Kind == ChatEntryKind.Tool)
+                        {
+                            CollapseToolRound();
+                        }
+
                         // Append to the last assistant entry, or create one
                         if (Entries.Count > 0 && Entries[^1].Kind == ChatEntryKind.Assistant)
                         {
@@ -386,6 +553,9 @@ public partial class ChatViewModel : ObservableObject
             _turnCts = null;
             _dispatch(() =>
             {
+                // Turn finished — collapse any remaining tool round
+                CollapseToolRound();
+
                 IsBusy = false;
                 SendCommand.NotifyCanExecuteChanged();
                 StopCommand.NotifyCanExecuteChanged();
