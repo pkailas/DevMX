@@ -109,6 +109,31 @@ public partial class MainWindow : Window
         {
             UpdateRailVisibility();
         }
+        else if (e.PropertyName == nameof(MainViewModel.Chat))
+        {
+            // Reconnect swaps in a fresh ChatViewModel - re-hook auto-scroll to its Entries.
+            HookChatAutoScroll();
+        }
+    }
+
+    private ScrollViewer? _chatScrollViewer;
+    private INotifyCollectionChanged? _hookedEntries;
+    private NotifyCollectionChangedEventHandler? _entriesHandler;
+
+    private void HookChatAutoScroll()
+    {
+        if (_chatScrollViewer == null)
+            return;
+        if (_hookedEntries != null && _entriesHandler != null)
+            _hookedEntries.CollectionChanged -= _entriesHandler;
+
+        _hookedEntries = Vm.Chat.Entries;
+        _entriesHandler = (s, args) =>
+        {
+            Dispatcher.BeginInvoke(new Action(() => _chatScrollViewer.ScrollToBottom()), DispatcherPriority.Background);
+        };
+        _hookedEntries.CollectionChanged += _entriesHandler;
+        _chatScrollViewer.ScrollToBottom();
     }
 
     private void UpdateRailVisibility()
@@ -144,14 +169,8 @@ public partial class MainWindow : Window
     {
         if (sender is ScrollViewer sv)
         {
-            // Subscribe to entry collection changes for auto-scroll
-            INotifyCollectionChanged entries = Vm.Chat.Entries;
-            entries.CollectionChanged += (s, args) =>
-            {
-                Dispatcher.BeginInvoke(new Action(() => sv.ScrollToBottom()), DispatcherPriority.Background);
-            };
-
-            sv.ScrollToBottom();
+            _chatScrollViewer = sv;
+            HookChatAutoScroll();
         }
     }
 

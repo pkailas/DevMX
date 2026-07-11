@@ -5,8 +5,11 @@ namespace DevMX.App.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public SidebarViewModel Sidebar { get; private set; }
-    public ChatViewModel Chat { get; private set; }
+    [ObservableProperty]
+    private SidebarViewModel sidebar = null!;
+
+    [ObservableProperty]
+    private ChatViewModel chat = null!;
     public ViewerViewModel Viewer { get; }
     public TaskMonitorViewModel TaskMonitor { get; }
     public SettingsViewModel Settings { get; }
@@ -210,7 +213,7 @@ public partial class MainViewModel : ObservableObject
             _dispatch(() =>
             {
                 StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
-                WindowTitle = $"DevMX � {_settings.WorkDir}";
+                WindowTitle = $"DevMX - {_settings.WorkDir}";
                 Chat.SetInitialized(true);
                 IsBusy = false;
             });
@@ -294,35 +297,8 @@ public partial class MainViewModel : ObservableObject
             StatusText = "Tearing down...";
         });
 
-        await _session.DisposeAsync();
-
-        // Create a new session with updated settings
-        var newSession = new AppSession(_settings);
-
-        // We need to swap the session references. Since AppSession is sealed and MainViewModel
-        // holds a reference, we'll reinitialize the existing session by creating a new one
-        // and replacing internal references. Since we can't swap _session directly,
-        // we'll use a different approach: dispose and re-create via the composition root.
-        // Actually, the simplest approach: dispose old, create new, update all references.
-        // But MainViewModel holds _session as readonly... Let me fix that.
-        
-        // For now, just dispose and recreate. We'll update the field.
         await DisposeSessionAsync();
-        
-        // Create fresh session - we need to update the session reference
-        // Since _session is readonly, we need to change it. Let me restructure.
-        // Actually, the cleanest approach is to make _session non-readonly and reassign.
-        // Let me just update the implementation below.
-        
-        // For the current structure, let's just reinitialize by creating a new AppSession
-        // and passing it through. We'll need to update the MainWindow to support this.
-        // The simplest fix: make the session replaceable.
-        
-        // Let me just do a simple re-init pattern: dispose, create new, notify UI.
-        // We'll handle this properly by making _session non-readonly.
-        
-        // Re-create session
-        _session = new AppSession(_settings);
+                _session = new AppSession(_settings);
         // Re-create ViewModels with the new session
         var newChat = new ChatViewModel(_session, _dispatch);
         newChat.SetAutoTitleCallback(async (msg) => await Sidebar.AutoTitleAsync(msg));
@@ -452,7 +428,7 @@ public partial class MainViewModel : ObservableObject
         _dispatch(() =>
         {
             StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
-                WindowTitle = $"DevMX � {_settings.WorkDir}";
+                WindowTitle = $"DevMX - {_settings.WorkDir}";
             Chat.SetInitialized(true);
             IsBusy = false;
         });
