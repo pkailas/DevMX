@@ -11,7 +11,6 @@
     <Setter Property="Background" Value="{DynamicResource WindowBackground}"/>
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
     <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
-    <Setter Property="FontSize" Value="13"/>
   </Style>
 
   <!-- ===== TEXTBOX ===== -->
@@ -269,7 +268,6 @@
   <Style TargetType="Menu">
     <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-    <Setter Property="FontSize" Value="13"/>
     <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
     <Setter Property="Padding" Value="4,2"/>
   </Style>
@@ -278,7 +276,6 @@
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
     <Setter Property="Padding" Value="8,4"/>
-    <Setter Property="FontSize" Value="13"/>
     <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -294,7 +291,7 @@
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <!-- Check mark for checkable items -->
-                <TextBlock Grid.Column="0" Text="✓" FontSize="11" Margin="0,0,6,0"
+                <TextBlock Grid.Column="0" Text="✓" Margin="0,0,6,0"
                            Foreground="{DynamicResource ForegroundBrush}"
                            Visibility="{TemplateBinding IsChecked, Converter={StaticResource BoolVis}}"/>
                 <!-- Header (with access key support) -->
@@ -303,7 +300,7 @@
                                   RecognizesAccessKey="True"
                                   VerticalAlignment="Center"/>
                 <!-- Submenu arrow -->
-                <TextBlock Grid.Column="2" Text="▶" FontSize="9" Margin="8,0,0,0"
+                <TextBlock Grid.Column="2" Text="▶" Margin="8,0,0,0"
                            Foreground="{DynamicResource DimBrush}"
                            Visibility="{TemplateBinding HasItems, Converter={StaticResource BoolVis}}"/>
               </Grid>
@@ -348,7 +345,6 @@
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
     <Setter Property="Padding" Value="8,4"/>
-    <Setter Property="FontSize" Value="13"/>
     <Setter Property="FontFamily" Value="Segoe UI, sans-serif"/>
     <Setter Property="Template">
       <Setter.Value>

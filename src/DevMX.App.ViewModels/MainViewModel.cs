@@ -613,6 +613,39 @@ public partial class MainViewModel : ObservableObject
         Settings.SetToolProfileCommand.Execute(profileName);
     }
 
+    /// <summary>Current font size — backed by settings.</summary>
+    public int FontSize => Settings.FontSize;
+
+    /// <summary>Zoom percentage display text (e.g. "100%", "115%").</summary>
+    public string ZoomDisplayText => Settings.ZoomDisplayText;
+
+    /// <summary>Increase global font size to next zoom level.</summary>
+    [RelayCommand]
+    private void IncreaseFontSize()
+    {
+        Settings.IncreaseFontSizeCommand.Execute(null);
+        OnPropertyChanged(nameof(FontSize));
+        OnPropertyChanged(nameof(ZoomDisplayText));
+    }
+
+    /// <summary>Decrease global font size to previous zoom level.</summary>
+    [RelayCommand]
+    private void DecreaseFontSize()
+    {
+        Settings.DecreaseFontSizeCommand.Execute(null);
+        OnPropertyChanged(nameof(FontSize));
+        OnPropertyChanged(nameof(ZoomDisplayText));
+    }
+
+    /// <summary>Reset font size to default (13pt = 100%).</summary>
+    [RelayCommand]
+    private void ResetFontSize()
+    {
+        Settings.ResetFontSizeCommand.Execute(null);
+        OnPropertyChanged(nameof(FontSize));
+        OnPropertyChanged(nameof(ZoomDisplayText));
+    }
+
     /// <summary>Check if the current theme is dark.</summary>
     public bool IsDarkTheme => Settings.Theme == "dark";
 

@@ -5,12 +5,16 @@
         xmlns:app="clr-namespace:DevMX.App"
         xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
         Title="{Binding WindowTitle}" Width="1400" Height="900"
-        MinWidth="800" MinHeight="500">
+        MinWidth="800" MinHeight="500"
+        FontSize="{Binding FontSize}">
 
   <Window.InputBindings>
     <KeyBinding Key="N" Modifiers="Ctrl" Command="{Binding NewConversationCommand}"/>
     <KeyBinding Key="F" Modifiers="Ctrl" Command="{Binding FocusSearchCommand}"/>
     <KeyBinding Key="B" Modifiers="Ctrl" Command="{Binding ToggleSidebarCommand}"/>
+    <KeyBinding Key="OemPlus" Modifiers="Ctrl" Command="{Binding IncreaseFontSizeCommand}"/>
+    <KeyBinding Key="OemMinus" Modifiers="Ctrl" Command="{Binding DecreaseFontSizeCommand}"/>
+    <KeyBinding Key="D0" Modifiers="Ctrl" Command="{Binding ResetFontSizeCommand}"/>
     <KeyBinding Key="Escape" Command="{Binding Chat.StopCommand}"/>
   </Window.InputBindings>
 
@@ -31,7 +35,7 @@
                 CornerRadius="6" Padding="10,6"
                 Margin="0,0,20,0">
           <TextBox Text="{Binding Text, Mode=OneWay}" TextWrapping="Wrap"
-                   Foreground="White" FontSize="13"
+                   Foreground="White"
                    IsReadOnly="True" BorderThickness="0" Background="Transparent"
                    IsReadOnlyCaretVisible="False" IsTabStop="False"
                    Padding="0"/>
@@ -42,7 +46,7 @@
     <DataTemplate x:Key="AssistantEntryTemplate">
       <Border Margin="0,2" Padding="10,6">
         <TextBox Text="{Binding Text, Mode=OneWay}" TextWrapping="Wrap"
-                 Foreground="{DynamicResource ForegroundBrush}" FontSize="13"
+                 Foreground="{DynamicResource ForegroundBrush}"
                  IsReadOnly="True" BorderThickness="0" Background="Transparent"
                  IsReadOnlyCaretVisible="False" IsTabStop="False"
                  Padding="0"/>
@@ -56,7 +60,6 @@
         <Grid>
           <!-- Clickable variant: hyperlink-style TextBlock with click handler -->
           <TextBlock FontFamily="{DynamicResource MonospaceFontFamily}"
-                     FontSize="12"
                      Text="{Binding Text}"
                      Foreground="{DynamicResource AccentBrush}"
                      TextDecorations="Underline"
@@ -79,7 +82,6 @@
           </TextBlock>
           <!-- Non-clickable variant: selectable TextBox -->
           <TextBox FontFamily="{DynamicResource MonospaceFontFamily}"
-                   FontSize="12"
                    Text="{Binding Text, Mode=OneWay}"
                    Foreground="{DynamicResource DimBrush}"
                    IsReadOnly="True" BorderThickness="0" Background="Transparent"
@@ -105,8 +107,7 @@
               Background="{DynamicResource PanelBackground}"
               BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
               CornerRadius="4">
-        <TextBox Text="{Binding Text, Mode=OneWay}" TextWrapping="Wrap"
-                 FontSize="12" Foreground="{DynamicResource DimBrush}" FontStyle="Italic"
+        <TextBox Text="{Binding Text, Mode=OneWay}" TextWrapping="Wrap" Foreground="{DynamicResource DimBrush}" FontStyle="Italic"
                  IsReadOnly="True" BorderThickness="0" Background="Transparent"
                  IsReadOnlyCaretVisible="False" IsTabStop="False"
                  Padding="0"/>
@@ -174,6 +175,10 @@
         <Separator/>
         <MenuItem Header="_Dark Theme" IsCheckable="True" IsChecked="{Binding IsDarkTheme, Mode=OneWay}" Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
         <MenuItem Header="_Light Theme" IsCheckable="True" IsChecked="{Binding IsLightTheme, Mode=OneWay}" Command="{Binding SetThemeCommand}" CommandParameter="light"/>
+        <Separator/>
+        <MenuItem Header="Increase Font Size" Command="{Binding IncreaseFontSizeCommand}" InputGestureText="Ctrl+="/>
+        <MenuItem Header="Reset Font Size" Command="{Binding ResetFontSizeCommand}" InputGestureText="Ctrl+0"/>
+        <MenuItem Header="Decrease Font Size" Command="{Binding DecreaseFontSizeCommand}" InputGestureText="Ctrl+-"/>
       </MenuItem>
       <!-- Tools -->
       <MenuItem Header="_Tools" Style="{StaticResource TopLevelMenuItem}">
@@ -206,9 +211,9 @@
         <StackPanel x:Name="CollapsedRail" Width="44" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Background="{DynamicResource PanelBackground}">
-          <Button Content="&#9776;" FontSize="16" Padding="6,10" HorizontalAlignment="Stretch" Command="{Binding ToggleSidebarCommand}" ToolTip="Toggle sidebar"/>
-          <Button Content="&#128172;" FontSize="14" Padding="6,10" HorizontalAlignment="Stretch" Click="RailChatBtn_Click" ToolTip="Conversations"/>
-          <Button Content="&#9881;" FontSize="16" Padding="6,10" HorizontalAlignment="Stretch" Click="RailSettingsBtn_Click" ToolTip="Settings"/>
+          <Button Content="&#9776;" Padding="6,10" HorizontalAlignment="Stretch" Command="{Binding ToggleSidebarCommand}" ToolTip="Toggle sidebar"/>
+          <Button Content="&#128172;" Padding="6,10" HorizontalAlignment="Stretch" Click="RailChatBtn_Click" ToolTip="Conversations"/>
+          <Button Content="&#9881;" Padding="6,10" HorizontalAlignment="Stretch" Click="RailSettingsBtn_Click" ToolTip="Settings"/>
         </StackPanel>
 
         <!-- Expanded rail (260px wide, sidebar content) -->
@@ -219,7 +224,7 @@
         <StackPanel>
           <!-- Header -->
           <StackPanel Orientation="Horizontal" Margin="10,8,10,4">
-            <TextBlock Text="Conversations" FontSize="12" FontWeight="SemiBold"
+            <TextBlock Text="Conversations" FontWeight="SemiBold"
                        Foreground="{DynamicResource DimBrush}" VerticalAlignment="Center"/>
           </StackPanel>
 
@@ -233,14 +238,13 @@
               </Grid.ColumnDefinitions>
               <TextBox Grid.Column="0" x:Name="SearchTextBox"
                        Text="{Binding Sidebar.SearchText, UpdateSourceTrigger=PropertyChanged}"
-                       Padding="6,3" FontSize="11" BorderThickness="0" Background="Transparent"
+                       Padding="6,3" BorderThickness="0" Background="Transparent"
                        VerticalContentAlignment="Center">
                 <TextBox.InputBindings>
                   <KeyBinding Key="Escape" Command="{Binding Sidebar.CancelRenameCommand}"/>
                 </TextBox.InputBindings>
               </TextBox>
-              <TextBlock Grid.Column="0" Text="Search conversations…"
-                         FontSize="11" Foreground="{DynamicResource DimBrush}"
+              <TextBlock Grid.Column="0" Text="Search conversations…" Foreground="{DynamicResource DimBrush}"
                          Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False">
                 <TextBlock.Style>
                   <Style TargetType="TextBlock">
@@ -253,7 +257,7 @@
                   </Style>
                 </TextBlock.Style>
               </TextBlock>
-              <Button Grid.Column="1" x:Name="SearchClearBtn" Content="×" FontSize="10"
+              <Button Grid.Column="1" x:Name="SearchClearBtn" Content="×"
                       Padding="4,2,6,2" Background="Transparent" BorderThickness="0"
                       Foreground="{DynamicResource DimBrush}" ToolTip="Clear search"
                       VerticalAlignment="Stretch"
@@ -280,8 +284,7 @@
                   <StackPanel Grid.Column="0">
                     <!-- Title display -->
                     <TextBlock x:Name="TitleText"
-                               Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                               FontSize="12" Foreground="{DynamicResource ForegroundBrush}"
+                               Text="{Binding Title}" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ForegroundBrush}"
                                MouseDown="ConversationTitle_MouseDown">
                       <TextBlock.Style>
                         <Style TargetType="TextBlock">
@@ -295,8 +298,7 @@
                     </TextBlock>
                     <!-- Title edit box -->
                     <TextBox x:Name="TitleEdit"
-                             Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="12" Foreground="{DynamicResource ForegroundBrush}"
+                             Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}" Foreground="{DynamicResource ForegroundBrush}"
                              Background="{DynamicResource InputBackground}"
                              BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
                              Padding="2,1" LostFocus="TitleEdit_LostFocus">
@@ -321,11 +323,10 @@
                                     CommandParameter="{Binding}"/>
                       </TextBox.InputBindings>
                     </TextBox>
-                    <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}"
-                               FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                    <TextBlock Text="{Binding UpdatedAt, StringFormat='{}{0:HH:mm}'}" Foreground="{DynamicResource DimBrush}"/>
                   </StackPanel>
                   <!-- Rename pencil button -->
-                  <Button Grid.Column="1" Content="✎" FontSize="10" Padding="2,0,4,0"
+                  <Button Grid.Column="1" Content="✎" Padding="2,0,4,0"
                           Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource DimBrush}"
                           Command="{Binding DataContext.Sidebar.BeginRenameCommand,
@@ -347,7 +348,7 @@
                     </Button.Style>
                   </Button>
                   <!-- Delete button -->
-                  <Button Grid.Column="2" Content="×" FontSize="10" Padding="2,0,4,0"
+                  <Button Grid.Column="2" Content="×" Padding="2,0,4,0"
                           Background="Transparent" BorderThickness="0"
                           Foreground="{DynamicResource DimBrush}"
                           Command="{Binding DataContext.Sidebar.DeleteConversationCommand,
@@ -386,45 +387,41 @@
                   BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   Background="{DynamicResource InputBackground}">
             <StackPanel>
-              <TextBlock Text="Settings" FontSize="12" FontWeight="SemiBold"
+              <TextBlock Text="Settings" FontWeight="SemiBold"
                          Foreground="{DynamicResource DimBrush}" Margin="0,0,0,6"/>
 
               <!-- Endpoint -->
               <StackPanel Margin="0,2">
-                <TextBlock Text="Endpoint" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
-                <TextBox Text="{Binding Settings.Endpoint, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="11" Padding="4,2"/>
+                <TextBlock Text="Endpoint" Foreground="{DynamicResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Endpoint, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
               </StackPanel>
 
               <!-- Model -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Model (empty = auto)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
-                <TextBox Text="{Binding Settings.Model, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="11" Padding="4,2"/>
+                <TextBlock Text="Model (empty = auto)" Foreground="{DynamicResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Model, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
               </StackPanel>
 
               <!-- Provider -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Provider (openai / anthropic)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
-                <TextBox Text="{Binding Settings.Provider, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="11" Padding="4,2"/>
+                <TextBlock Text="Provider (openai / anthropic)" Foreground="{DynamicResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.Provider, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
               </StackPanel>
 
               <!-- Workdir -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Workdir" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
-                <TextBox Text="{Binding Settings.WorkDir, UpdateSourceTrigger=PropertyChanged}"
-                         FontSize="11" Padding="4,2"/>
+                <TextBlock Text="Workdir" Foreground="{DynamicResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.WorkDir, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
               </StackPanel>
 
               <!-- Theme selector -->
               <StackPanel Margin="0,4">
-                <TextBlock Text="Theme" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                <TextBlock Text="Theme" Foreground="{DynamicResource DimBrush}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                  <Button Content="Dark" FontSize="11" Padding="10,3" Command="{Binding Settings.SetThemeCommand}" CommandParameter="dark">
+                  <Button Content="Dark" Padding="10,3" Command="{Binding Settings.SetThemeCommand}" CommandParameter="dark">
                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.Theme}" Value="dark"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                   </Button>
-                  <Button Content="Light" FontSize="11" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetThemeCommand}" CommandParameter="light">
+                  <Button Content="Light" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetThemeCommand}" CommandParameter="light">
                     <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.Theme}" Value="light"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                   </Button>
                 </StackPanel>
@@ -432,43 +429,42 @@
 
                <!-- Tool access selector -->
                <StackPanel Margin="0,4">
-                 <TextBlock Text="Tool access" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                 <TextBlock Text="Tool access" Foreground="{DynamicResource DimBrush}"/>
                  <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                   <Button Content="Auto" FontSize="11" Padding="10,3" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="auto">
+                   <Button Content="Auto" Padding="10,3" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="auto">
                      <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="auto"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                    </Button>
-                   <Button Content="Full" FontSize="11" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="full">
+                   <Button Content="Full" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="full">
                      <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="full"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                    </Button>
-                   <Button Content="Restricted" FontSize="11" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="restricted">
+                   <Button Content="Restricted" Padding="10,3" Margin="4,0,0,0" Command="{Binding Settings.SetToolProfileCommand}" CommandParameter="restricted">
                      <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="restricted"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                    </Button>
                  </StackPanel>
-                  <TextBlock Text="applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="0,2,0,0"/>
+                  <TextBlock Text="applies on reconnect" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="0,2,0,0"/>
                 </StackPanel>
 
                 <!-- Poll delay -->
                 <StackPanel Margin="0,4">
-                  <TextBlock Text="Poll delay (s)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                  <TextBlock Text="Poll delay (s)" Foreground="{DynamicResource DimBrush}"/>
                   <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                    <TextBox Text="{Binding Settings.PollThrottleSeconds, UpdateSourceTrigger=PropertyChanged}"
-                             FontSize="11" Padding="4,2" Width="60"/>
-                    <TextBlock Text="0 = off, applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="6,0,0,3" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding Settings.PollThrottleSeconds, UpdateSourceTrigger=PropertyChanged}" Padding="4,2" Width="60"/>
+                    <TextBlock Text="0 = off, applies on reconnect" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="6,0,0,3" VerticalAlignment="Center"/>
                   </StackPanel>
                 </StackPanel>
 
                 <!-- Read-only info -->
                <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
                 <StackPanel>
-                  <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}">
+                  <TextBlock Foreground="{DynamicResource DimBrush}">
                     <Run Text="MCP Server:" FontWeight="SemiBold"/>
                     <LineBreak/>
-                    <Run Text="{Binding Settings.ServerExe, Mode=OneWay}" FontSize="9"/>
+                    <Run Text="{Binding Settings.ServerExe, Mode=OneWay}"/>
                   </TextBlock>
-                  <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0">
+                  <TextBlock Foreground="{DynamicResource DimBrush}" Margin="0,2,0,0">
                     <Run Text="API Key:" FontWeight="SemiBold"/>
                     <LineBreak/>
-                    <Run Text="{Binding Settings.ApiKeySource, Mode=OneWay}" FontSize="9"/>
+                    <Run Text="{Binding Settings.ApiKeySource, Mode=OneWay}"/>
                   </TextBlock>
                 </StackPanel>
               </Border>
@@ -525,7 +521,7 @@
             <DataTemplate>
               <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding Title}" Margin="0,0,6,0"/>
-                <Button Content="×" FontSize="10" Padding="2,0,4,0"
+                <Button Content="×" Padding="2,0,4,0"
                         Background="Transparent" BorderThickness="0"
                         Foreground="{DynamicResource DimBrush}"
                         Command="{Binding DataContext.Viewer.CloseTabCommand,
@@ -555,7 +551,6 @@
                   IsReadOnly="True"
                   ShowLineNumbers="True"
                   FontFamily="{DynamicResource MonospaceFontFamily}"
-                  FontSize="12"
                   WordWrap="True"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
@@ -584,7 +579,7 @@
 
           <!-- Task list header -->
           <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,4">
-            <TextBlock Text="Tasks" FontSize="12" FontWeight="SemiBold"
+            <TextBlock Text="Tasks" FontWeight="SemiBold"
                        Foreground="{DynamicResource DimBrush}"/>
           </StackPanel>
 
@@ -599,11 +594,10 @@
                   <!-- Task header row -->
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding JobId}"
-                               FontFamily="{DynamicResource MonospaceFontFamily}"
-                               FontSize="11" Foreground="{DynamicResource AccentBrush}"
+                               FontFamily="{DynamicResource MonospaceFontFamily}" Foreground="{DynamicResource AccentBrush}"
                                Width="80"/>
                     <!-- State with color coding -->
-                    <TextBlock Text="{Binding State}" FontSize="11" Width="55">
+                    <TextBlock Text="{Binding State}" Width="55">
                       <TextBlock.Style>
                         <Style TargetType="TextBlock">
                           <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
@@ -627,11 +621,11 @@
                         </Style>
                       </TextBlock.Style>
                     </TextBlock>
-                    <TextBlock Text="{Binding Detail}" FontSize="11"
+                    <TextBlock Text="{Binding Detail}"
                                Foreground="{DynamicResource ForegroundBrush}"
                                TextTrimming="CharacterEllipsis"/>
                     <!-- Cancel button — visible only for queued/running live tasks -->
-                    <Button Content="Cancel" FontSize="10" Padding="4,1" Margin="4,0,0,0"
+                    <Button Content="Cancel" Padding="4,1" Margin="4,0,0,0"
                             Background="Transparent" BorderBrush="#F44747" Foreground="#F44747"
                             Command="{Binding CancelTaskCommand}"
                             ToolTip="Cancel this task">
@@ -656,7 +650,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <TextBlock FontSize="10"
+                        <TextBlock
                                    FontFamily="{DynamicResource MonospaceFontFamily}"
                                    Foreground="{DynamicResource AccentBrush}"
                                    TextDecorations="Underline"
@@ -689,7 +683,6 @@
                    Text="{Binding TaskMonitor.JournalText, Mode=OneWay}"
                    IsReadOnly="True"
                    FontFamily="{DynamicResource MonospaceFontFamily}"
-                   FontSize="11"
                    TextWrapping="NoWrap"
                    VerticalScrollBarVisibility="Auto"
                    HorizontalScrollBarVisibility="Auto"
@@ -719,7 +712,7 @@
         </Grid.RowDefinitions>
 
         <!-- Chat header -->
-        <TextBlock Grid.Row="0" Text="Chat" FontSize="12" FontWeight="SemiBold"
+        <TextBlock Grid.Row="0" Text="Chat" FontWeight="SemiBold"
                    Foreground="{DynamicResource DimBrush}" Padding="10,8"/>
 
         <!-- Chat entries -->
@@ -790,11 +783,14 @@
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{Binding StatusText}" FontSize="12"
-                       Foreground="{DynamicResource DimBrush}" Padding="8,2"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+              <TextBlock Text="{Binding StatusText}"
+                         Foreground="{DynamicResource DimBrush}" Padding="8,2"/>
+              <TextBlock Text="{Binding ZoomDisplayText}"
+                         Foreground="{DynamicResource DimBrush}" Padding="8,2" Opacity="0.7"/>
+            </StackPanel>
             <Button Grid.Column="1" Content="Reconnect"
-                    Command="{Binding ReconnectCommand}"
-                    FontSize="10" Background="{DynamicResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"
+                    Command="{Binding ReconnectCommand}" Background="{DynamicResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"
                     ToolTip="Reconnect with current settings"/>
           </Grid>
         </StatusBar>

@@ -78,8 +78,13 @@ public sealed class AgenticLoop
         var history = new List<JsonNode>(messages.Count);
         foreach (var msg in messages)
         {
-            var content = JsonNode.Parse(msg.ContentJson) as JsonArray
-                ?? throw new InvalidOperationException($"Invalid content_json in message {msg.Id}: {msg.ContentJson}");
+            var parsed = JsonNode.Parse(msg.ContentJson);
+            JsonArray content = parsed switch
+            {
+                JsonArray arr => arr,
+                JsonObject obj when obj["content"] is JsonArray contentArr => contentArr,
+                _ => throw new InvalidOperationException($"Invalid content_json in message {msg.Id}: {msg.ContentJson}")
+            };
             history.Add(new JsonObject
             {
                 ["role"] = msg.Role,
@@ -120,7 +125,8 @@ public sealed class AgenticLoop
 
             // Append assistant response verbatim to history + store.
             _history.Add(response.AssistantMessage);
-            await _store.AppendMessageAsync(_conversationId, "assistant", response.AssistantMessage.ToJsonString());
+            var assistantContentJson = ExtractContentJson(response.AssistantMessage);
+            await _store.AppendMessageAsync(_conversationId, "assistant", assistantContentJson);
 
             // Invoke callbacks for text blocks.
             foreach (var text in response.TextBlocks)
@@ -242,11 +248,17 @@ public sealed class AgenticLoop
     /// <summary>Extract the content JSON from a provider message node for persistence.</summary>
     private static string ExtractContentJson(JsonNode msgNode)
     {
-        var obj = msgNode.AsObject();
-        if (obj["content"] is JsonArray contentArray)
+        // AnthropicClient returns the content array directly; OpenAiCompatClient returns a full message object.
+        if (msgNode is JsonArray contentArr)
         {
-            // Anthropic-style: { "role": ..., "content": [...] }
-            return contentArray.ToJsonString();
+            return contentArr.ToJsonString();
+        }
+
+        var obj = msgNode.AsObject();
+        if (obj["content"] is JsonArray innerArray)
+        {
+            // Full message with content array: { "role": ..., "content": [...] }
+            return innerArray.ToJsonString();
         }
         if (obj["content"] is JsonValue contentValue)
         {

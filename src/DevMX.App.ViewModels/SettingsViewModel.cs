@@ -21,6 +21,7 @@ public partial class SettingsViewModel : ObservableObject
     private string _originalTheme;
     private string _originalToolProfile;
     private string _originalPollThrottleSeconds;
+    private int _originalFontSize;
 
     [ObservableProperty]
     private string endpoint;
@@ -42,6 +43,18 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string pollThrottleSeconds;
+
+    [ObservableProperty]
+    private int fontSize;
+
+    /// <summary>Predefined font size levels (like Edge zoom levels). Base = 13 (100%).</summary>
+    private static readonly int[] FontSizeLevels = { 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24 };
+
+    /// <summary>Default/base font size (100% zoom).</summary>
+    private const int DefaultFontSize = 13;
+
+    /// <summary>Computed zoom percentage text (e.g. "100%", "115%").</summary>
+    public string ZoomDisplayText => $"{Math.Round((FontSize / (double)DefaultFontSize) * 100)}%";
 
     // ===== Testable path-based constructor =====
 
@@ -90,6 +103,7 @@ public partial class SettingsViewModel : ObservableObject
         _originalTheme = settings.Theme;
         _originalToolProfile = settings.ToolProfile;
         _originalPollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+        _originalFontSize = settings.FontSize;
 
         // Set VM fields (triggers OnPropertyChanged but persist handlers no-op until _initialized)
         Endpoint = settings.Endpoint;
@@ -99,6 +113,7 @@ public partial class SettingsViewModel : ObservableObject
         Theme = settings.Theme;
         ToolProfile = settings.ToolProfile;
         PollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+        FontSize = settings.FontSize;
 
         _initialized = true;
     }
@@ -113,6 +128,11 @@ public partial class SettingsViewModel : ObservableObject
             _onThemeChanged?.Invoke(Theme);
             // Persist theme immediately
             PersistTheme();
+        }
+        if (e.PropertyName == nameof(FontSize))
+        {
+            // Persist font size immediately
+            PersistFontSize();
         }
     }
 
@@ -148,6 +168,42 @@ public partial class SettingsViewModel : ObservableObject
         settings.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
     }
 
+    private void PersistFontSize()
+    {
+        var settings = DevMxSettings.Load(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+        settings.FontSize = FontSize;
+        settings.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
+    }
+
+    [RelayCommand]
+    private void IncreaseFontSize()
+    {
+        int index = Array.IndexOf(FontSizeLevels, FontSize);
+        if (index >= 0 && index < FontSizeLevels.Length - 1)
+        {
+            FontSize = FontSizeLevels[index + 1];
+            _originalFontSize = FontSize;
+        }
+    }
+
+    [RelayCommand]
+    private void DecreaseFontSize()
+    {
+        int index = Array.IndexOf(FontSizeLevels, FontSize);
+        if (index > 0)
+        {
+            FontSize = FontSizeLevels[index - 1];
+            _originalFontSize = FontSize;
+        }
+    }
+
+    [RelayCommand]
+    private void ResetFontSize()
+    {
+        FontSize = DefaultFontSize;
+        _originalFontSize = FontSize;
+    }
+
     [RelayCommand(CanExecute = nameof(CanApply))]
     private void Apply()
     {
@@ -162,6 +218,7 @@ public partial class SettingsViewModel : ObservableObject
         fresh.WorkDir = (WorkDir != _originalWorkDir) ? WorkDir : fresh.WorkDir;
         fresh.Theme = (Theme != _originalTheme) ? Theme : fresh.Theme;
         fresh.ToolProfile = (ToolProfile != _originalToolProfile) ? ToolProfile : fresh.ToolProfile;
+        fresh.FontSize = (FontSize != _originalFontSize) ? FontSize : fresh.FontSize;
 
         // Validate PollThrottleSeconds
         if (int.TryParse(PollThrottleSeconds, out int throttleVal))
@@ -184,6 +241,7 @@ public partial class SettingsViewModel : ObservableObject
         Theme = fresh.Theme;
         ToolProfile = fresh.ToolProfile;
         PollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+        FontSize = fresh.FontSize;
 
         // Update originals to match the merged result (so subsequent Apply is idempotent)
         _originalEndpoint = fresh.Endpoint;
@@ -193,6 +251,7 @@ public partial class SettingsViewModel : ObservableObject
         _originalTheme = fresh.Theme;
         _originalToolProfile = fresh.ToolProfile;
         _originalPollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+        _originalFontSize = fresh.FontSize;
 
         _onApply();
     }

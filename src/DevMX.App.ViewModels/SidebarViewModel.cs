@@ -139,7 +139,7 @@ public partial class SidebarViewModel : ObservableObject
             _dispatch(() =>
             {
                 _clearChatEntries();
-                _isTitled = true;
+                _isTitled = !item.Title.StartsWith("Session ");
             });
 
             // Load history entries into the chat

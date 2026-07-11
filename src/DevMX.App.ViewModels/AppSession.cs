@@ -332,47 +332,37 @@ public sealed class AppSession : IAsyncDisposable
     /// Verifies the exact arg name from the tool's input schema at runtime.
     /// Returns the raw diff text.
     /// </summary>
-    public async Task<string> FetchDiffAsync(string filePath)
+    public async Task<string> FetchDiffAsync(string path)
     {
         if (_mcp == null)
             throw new InvalidOperationException("AppSession not initialized.");
 
-        // Look up the exact arg name from the tool schema
-        var argName = "filename"; // default fallback
-        try
+        // diff_file only tracks changes within THIS MCP session - but delegated edits happen in the
+        // headless agent's own session, so it always comes back empty here. Diff against git instead
+        // (DM's read_file doubles as a git runner: filename = "git diff -- <path>").
+        var result = await _mcp.CallToolAsync("read_file",
+            new Dictionary<string, object?> { ["filename"] = $"git diff -- \"{path}\"" });
+
+        // Extract fenced content ([read_file] banner line, then ``` fence, diff, closing fence).
+        var lines = result.Split('\n');
+        int firstFence = -1, lastFence = -1;
+        for (int i = 0; i < lines.Length; i++)
         {
-            var tools = await _mcp.ListToolsAsync();
-            var diffTool = tools.FirstOrDefault(t => t.ProtocolTool.Name == "diff_file");
-            if (diffTool != null && diffTool.ProtocolTool.InputSchema.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+            if (lines[i].Trim().StartsWith("```"))
             {
-                var schema = System.Text.Json.Nodes.JsonNode.Parse(diffTool.ProtocolTool.InputSchema.GetRawText())
-                    as System.Text.Json.Nodes.JsonObject;
-                // Check for properties in the schema
-                if (schema != null)
-                {
-                    foreach (var kvp in schema)
-                    {
-                        if (kvp.Key.Equals("filename", StringComparison.OrdinalIgnoreCase) ||
-                            kvp.Key.Equals("path", StringComparison.OrdinalIgnoreCase) ||
-                            kvp.Key.Equals("file", StringComparison.OrdinalIgnoreCase))
-                        {
-                            argName = kvp.Key;
-                            break;
-                        }
-                    }
-                }
+                if (firstFence < 0) firstFence = i;
+                lastFence = i;
             }
         }
-        catch
-        {
-            // Best-effort — use default arg name
-        }
 
-        var result = await _mcp.CallToolAsync("diff_file",
-            new Dictionary<string, object?> { [argName] = filePath });
+        string diff = firstFence >= 0 && lastFence > firstFence
+            ? string.Join("\n", lines[(firstFence + 1)..lastFence])
+            : result;
 
-        // Strip banner lines like FetchFileAsync does
-        return StripToolBanner(result);
+        if (string.IsNullOrWhiteSpace(diff) || diff.Trim() == "(no output)")
+            return $"[no uncommitted changes for {path} - the change may already be committed, or the file is outside the git repo]";
+
+        return diff;
     }
 
     private static string StripToolBanner(string result)
