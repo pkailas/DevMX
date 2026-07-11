@@ -139,17 +139,17 @@
       <MenuItem Header="_View" Style="{StaticResource TopLevelMenuItem}">
         <MenuItem Header="Toggle _Sidebar" Command="{Binding ToggleSidebarCommand}" InputGestureText="Ctrl+B"/>
         <Separator/>
-        <MenuItem Header="_Dark Theme" IsCheckable="True" IsChecked="{Binding IsDarkTheme}" Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
-        <MenuItem Header="_Light Theme" IsCheckable="True" IsChecked="{Binding IsLightTheme}" Command="{Binding SetThemeCommand}" CommandParameter="light"/>
+        <MenuItem Header="_Dark Theme" IsCheckable="True" IsChecked="{Binding IsDarkTheme, Mode=OneWay}" Command="{Binding SetThemeCommand}" CommandParameter="dark"/>
+        <MenuItem Header="_Light Theme" IsCheckable="True" IsChecked="{Binding IsLightTheme, Mode=OneWay}" Command="{Binding SetThemeCommand}" CommandParameter="light"/>
       </MenuItem>
       <!-- Tools -->
       <MenuItem Header="_Tools" Style="{StaticResource TopLevelMenuItem}">
         <MenuItem Header="_Tool Access" Style="{StaticResource TopLevelMenuItem}">
-          <MenuItem Header="_Auto" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=auto}"
+          <MenuItem Header="_Auto" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=auto, Mode=OneWay}"
                     Command="{Binding SetToolProfileMenuCommand}" CommandParameter="auto"/>
-          <MenuItem Header="_Full" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=full}"
+          <MenuItem Header="_Full" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=full, Mode=OneWay}"
                     Command="{Binding SetToolProfileMenuCommand}" CommandParameter="full"/>
-          <MenuItem Header="_Restricted" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=restricted}"
+          <MenuItem Header="_Restricted" IsCheckable="True" IsChecked="{Binding CurrentToolProfile, Converter={StaticResource StringEquals}, ConverterParameter=restricted, Mode=OneWay}"
                     Command="{Binding SetToolProfileMenuCommand}" CommandParameter="restricted"/>
         </MenuItem>
         <MenuItem Header="_Reconnect" Command="{Binding ReconnectCommand}"/>
