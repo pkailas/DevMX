@@ -34,6 +34,8 @@ public sealed class OpenAiCompatClient : IChatProvider
         _apiKey = apiKey;
         _model = model;
         _http = handler is not null ? new HttpClient(handler) : new HttpClient();
+        // Reasoning models can think for minutes; but a request must never hang forever (stuck IsBusy).
+        _http.Timeout = TimeSpan.FromMinutes(5);
     }
 
     /// <summary>

@@ -395,8 +395,17 @@ public partial class ChatViewModel : ObservableObject
     private async Task SendAsync()
     {
         var text = InputText.Trim();
-        if (string.IsNullOrWhiteSpace(text) || IsBusy || !IsInitialized || IsSendDisabled)
+        if (string.IsNullOrWhiteSpace(text))
             return;
+        if (IsBusy || !IsInitialized || IsSendDisabled)
+        {
+            // Never swallow a send silently - say why it was blocked.
+            string reason = IsBusy ? "a turn is still running - press Stop (or Esc) to interrupt it"
+                : !IsInitialized ? "the session is not connected yet - check the status bar / Reconnect"
+                : "sending is disabled for this conversation (provider mismatch)";
+            _dispatch(() => Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, $"[info] message not sent: {reason}")));
+            return;
+        }
 
         // Intercept slash commands before sending to the model
         if (_slashCommandHandler != null && text.StartsWith("/"))
