@@ -281,4 +281,85 @@ public class TaskMonitorViewModelTests
         vm.SelectedTask = vm.Tasks[1]; // job-1
         Assert.Contains("job-1", vm.JournalText);
     }
+
+    [Fact]
+    public void CancelTaskCallback_InvokedWithJobId()
+    {
+        // Arrange
+        var vm = CreateVm();
+        string? capturedJobId = null;
+        vm.SetCancelTaskCallback(async (jobId) =>
+        {
+            capturedJobId = jobId;
+        });
+
+        vm.AddOrUpdateTask("job-1", "running", "fix bug", isLive: true);
+
+        // Act
+        vm.Tasks[0].CancelTaskCommand.Execute(null);
+
+        // Assert
+        Assert.Equal("job-1", capturedJobId);
+    }
+
+    [Fact]
+    public void CancelTaskCallback_NotInvokedForNonCancellableState()
+    {
+        // Arrange
+        var vm = CreateVm();
+        bool called = false;
+        vm.SetCancelTaskCallback(async (jobId) =>
+        {
+            called = true;
+        });
+
+        vm.AddOrUpdateTask("job-1", "done", "fix bug", isLive: false);
+
+        // Act
+        vm.Tasks[0].CancelTaskCommand.Execute(null);
+
+        // Assert — done tasks are not cancellable
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void IsCancellable_True_ForRunningLiveTask()
+    {
+        var vm = CreateVm();
+        vm.AddOrUpdateTask("job-1", "running", "fix bug", isLive: true);
+        Assert.True(vm.Tasks[0].IsCancellable);
+    }
+
+    [Fact]
+    public void IsCancellable_True_ForQueuedLiveTask()
+    {
+        var vm = CreateVm();
+        vm.AddOrUpdateTask("job-1", "queued", "fix bug", isLive: true);
+        Assert.True(vm.Tasks[0].IsCancellable);
+    }
+
+    [Fact]
+    public void IsCancellable_False_ForDoneTask()
+    {
+        var vm = CreateVm();
+        vm.AddOrUpdateTask("job-1", "done", "fix bug", isLive: false);
+        Assert.False(vm.Tasks[0].IsCancellable);
+    }
+
+    [Fact]
+    public void IsCancellable_False_ForFailedTask()
+    {
+        var vm = CreateVm();
+        vm.AddOrUpdateTask("job-1", "failed", "fix bug", isLive: false);
+        Assert.False(vm.Tasks[0].IsCancellable);
+    }
+
+    [Fact]
+    public void IsCancellable_False_ForNonLiveRunningTask()
+    {
+        // Historical task — running but not live
+        var vm = CreateVm();
+        vm.AddOrUpdateTask("job-1", "running", "fix bug", isLive: false);
+        Assert.False(vm.Tasks[0].IsCancellable);
+    }
 }

@@ -563,4 +563,133 @@ public class AgenticLoopTests : IDisposable
         Assert.Equal("read_file", executor.Calls[0].Name);
         Assert.True(sw.ElapsedMilliseconds < 2000, $"Expected <2000ms but got {sw.ElapsedMilliseconds}ms — non-status tools should not throttle");
     }
+
+    // --- Fake executor that blocks on a TaskCompletionSource for cancellation tests ---
+
+    private sealed class BlockingToolExecutor : IMcpToolExecutor
+    {
+        public TaskCompletionSource<string> BlockTcs { get; } = new();
+
+        public List<(string Name, IReadOnlyDictionary<string, object?> Args)> Calls { get; } = new();
+
+        public Task<IReadOnlyList<ToolDefinition>> ListToolDefinitionsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ToolDefinition>>(new List<ToolDefinition>
+            {
+                new("read_file", "Read a file", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() })
+            });
+        }
+
+        public Task<string> CallToolAsync(string name, IReadOnlyDictionary<string, object?> args, CancellationToken ct = default)
+        {
+            Calls.Add((name, args));
+            // Block until the test signals completion or cancellation
+            return BlockTcs.Task;
+        }
+    }
+
+    // --- Cancellation tests ---
+
+    [Fact]
+    public async Task Cancellation_AfterToolCalls_AppendsCancelledResults()
+    {
+        // Arrange — provider returns tool_calls, executor blocks on first tool call
+        var toolInput = new JsonObject { ["filename"] = "test.cs" };
+
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "read_file", toolInput),
+            "tool_use");
+        // Extra response that won't be reached (cancelled before next LLM call)
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+
+        var handler = new StubHttpHandler(toolUseResponse, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new BlockingToolExecutor();
+        var loop = new AgenticLoop(client, executor, store, convId, null);
+
+        var cts = new CancellationTokenSource();
+
+        // Start the turn — it will block inside the tool executor
+        var turnTask = loop.RunTurnAsync(
+            "Read file",
+            _ => { },
+            (_, _) => { },
+            cts.Token,
+            (_, _, _) => { });
+
+        // Wait a bit for the tool call to start
+        await Task.Delay(100);
+
+        // Cancel
+        cts.Cancel();
+
+        // Assert: OperationCanceledException is thrown
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await turnTask);
+
+        // Verify the store has balanced history (user + assistant with tool_calls + tool result with "[cancelled by user]")
+        var messages = await store.GetMessagesAsync(convId);
+        var roles = messages.Select(m => m.Role).ToList();
+
+        // Should have: user, assistant (with tool_calls), user (tool result with cancelled text)
+        Assert.Equal(3, messages.Count);
+        Assert.Equal("user", roles[0]);
+        Assert.Equal("assistant", roles[1]);
+        Assert.Equal("user", roles[2]);
+
+        // Verify the tool result contains "[cancelled by user]"
+        Assert.Contains("[cancelled by user]", messages[2].ContentJson);
+    }
+
+    [Fact]
+    public async Task Cancellation_BeforeToolCall_CleanCancel()
+    {
+        // Arrange — use a handler that blocks on the first CreateMessageAsync call
+        var blockingHandler = new BlockingHttpHandler();
+        var client = new AnthropicClient("key", "model", blockingHandler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new FakeToolExecutor();
+        var loop = new AgenticLoop(client, executor, store, convId, null);
+
+        var cts = new CancellationTokenSource();
+
+        // Start the turn — it will block inside the HTTP call
+        var turnTask = loop.RunTurnAsync(
+            "Hello",
+            _ => { },
+            (_, _) => { },
+            cts.Token);
+
+        // Wait a bit for the request to start
+        await Task.Delay(100);
+
+        // Cancel
+        cts.Cancel();
+
+        // Assert: OperationCanceledException is thrown
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await turnTask);
+
+        // Verify the store has only the user message (no assistant, no tool results)
+        var messages = await store.GetMessagesAsync(convId);
+        Assert.Single(messages);
+        Assert.Equal("user", messages[0].Role);
+    }
+
+    // --- HTTP handler that blocks until cancelled ---
+
+    private sealed class BlockingHttpHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource<bool> _tcs = new();
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            // Real HttpClient throws on cancellation - mimic that, never return a fake response.
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            throw new InvalidOperationException("unreachable");
+        }
+    }
 }

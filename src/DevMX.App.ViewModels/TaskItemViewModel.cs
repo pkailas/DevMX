@@ -28,6 +28,10 @@ public partial class TaskItemViewModel : ObservableObject
     private ObservableCollection<string> changedFiles = new();
 
     private Action<string, string>? _openDiffTab;
+    private Func<string, Task>? _cancelTaskFunc;
+
+    /// <summary>True when the task is in a cancellable state (queued or running and live).</summary>
+    public bool IsCancellable => IsLive && (State == "queued" || State == "running");
 
     public TaskItemViewModel(string jobId, string state, string detail, bool isLive = false)
     {
@@ -41,6 +45,25 @@ public partial class TaskItemViewModel : ObservableObject
     internal void SetOpenDiffTabCallback(Action<string, string> callback)
     {
         _openDiffTab = callback;
+    }
+
+    internal void SetCancelTaskCallback(Func<string, Task> callback)
+    {
+        _cancelTaskFunc = callback;
+    }
+
+    [RelayCommand]
+    private async Task CancelTaskAsync()
+    {
+        if (_cancelTaskFunc == null || !IsCancellable) return;
+        try
+        {
+            await _cancelTaskFunc(JobId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TaskItemViewModel] Cancel error for {JobId}: {ex.Message}");
+        }
     }
 
     [RelayCommand]

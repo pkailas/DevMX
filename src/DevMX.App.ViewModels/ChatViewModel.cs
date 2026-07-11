@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
 using System.Text.Json.Nodes;
+using System.Threading;
 
 namespace DevMX.App.ViewModels;
 
@@ -14,6 +15,7 @@ public partial class ChatViewModel : ObservableObject
     private Func<string, Task>? _openFile;
     private Action<string, string, string>? _onTaskToolResult;
     private SlashCommandHandler? _slashCommandHandler;
+    private CancellationTokenSource? _turnCts;
 
     /// <summary>Set the callback for notifying the task monitor about task-related tool results.</summary>
     internal void SetTaskToolResultCallback(Action<string, string, string> callback)
@@ -54,6 +56,20 @@ public partial class ChatViewModel : ObservableObject
 
     /// <summary>Inverse of IsSendDisabled — used for IsEnabled binding on the input TextBox.</summary>
     public bool CanSendInput => !IsSendDisabled;
+
+    /// <summary>
+    /// Stop the current turn by cancelling its CancellationTokenSource.
+    /// Note: stopping the chat TURN does not kill a delegation already started —
+    /// that is by design (DM owns it; the task monitor keeps tracking it,
+    /// and its Cancel button is the kill switch).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStop))]
+    private void Stop()
+    {
+        _turnCts?.Cancel();
+    }
+
+    private bool CanStop() => IsBusy;
 
     public ChatViewModel(AppSession session, Action<Action> dispatch)
     {
@@ -253,7 +269,10 @@ public partial class ChatViewModel : ObservableObject
             InputText = string.Empty;
             IsBusy = true;
             SendCommand.NotifyCanExecuteChanged();
+            StopCommand.NotifyCanExecuteChanged();
         });
+
+        _turnCts = new CancellationTokenSource();
 
         try
         {
@@ -338,13 +357,21 @@ public partial class ChatViewModel : ObservableObject
                     // Notify task monitor about task-related tool results
                     _onTaskToolResult?.Invoke(name, argJson, resultText);
                 },
-                ct: CancellationToken.None);
+                ct: _turnCts.Token);
 
             // Notify caller of successful turn completion (for auto-title, etc.)
             if (_onTurnComplete != null)
             {
                 await _onTurnComplete(text);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // Turn was stopped by user — append info message, not an error.
+            _dispatch(() =>
+            {
+                Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, "[info] turn stopped"));
+            });
         }
         catch (Exception ex)
         {
@@ -355,10 +382,13 @@ public partial class ChatViewModel : ObservableObject
         }
         finally
         {
+            _turnCts?.Dispose();
+            _turnCts = null;
             _dispatch(() =>
             {
                 IsBusy = false;
                 SendCommand.NotifyCanExecuteChanged();
+                StopCommand.NotifyCanExecuteChanged();
             });
         }
     }

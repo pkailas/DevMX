@@ -309,6 +309,18 @@ public sealed class AppSession : IAsyncDisposable
     }
 
     /// <summary>
+    /// Cancels a running/queued task by calling the MCP devmind_task_cancel tool.
+    /// </summary>
+    public async Task<string> CancelTaskAsync(string jobId)
+    {
+        if (_mcp == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        return await _mcp.CallToolAsync("devmind_task_cancel",
+            new Dictionary<string, object?> { ["job_id"] = jobId });
+    }
+
+    /// <summary>
     /// Fetches a diff for a file by calling the MCP diff_file tool.
     /// Verifies the exact arg name from the tool's input schema at runtime.
     /// Returns the raw diff text.

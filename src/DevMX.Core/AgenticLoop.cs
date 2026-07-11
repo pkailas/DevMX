@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -114,6 +115,7 @@ public sealed class AgenticLoop
         for (int i = 0; i < _maxIterations; i++)
         {
             // Call LLM.
+            ct.ThrowIfCancellationRequested();
             var response = await _llm.CreateMessageAsync(_history, toolDefs, _systemPrompt, ct);
 
             // Append assistant response verbatim to history + store.
@@ -134,49 +136,91 @@ public sealed class AgenticLoop
 
             // Execute tools and build tool_result messages.
             var callResults = new List<(ParsedToolCall Call, string Result)>();
-            foreach (var call in response.ToolCalls)
+            try
             {
-                var args = ConvertToJsonDictionary(call.Input);
+                foreach (var call in response.ToolCalls)
+                {
+                    var args = ConvertToJsonDictionary(call.Input);
 
-                // Defense-in-depth: deny execution of tools not in the active profile.
-                string result;
-                if (!ToolProfiles.IsToolAllowed(call.Name, _toolProfile))
-                {
-                    result = ToolProfiles.DenyMessage(call.Name);
-                }
-                else
-                {
-                    // Throttle devmind_task_status polls for the same job_id.
-                    if (call.Name == "devmind_task_status" && _pollThrottleSeconds > 0)
+                    // Defense-in-depth: deny execution of tools not in the active profile.
+                    string result;
+                    if (!ToolProfiles.IsToolAllowed(call.Name, _toolProfile))
                     {
-                        string? jobId = args["job_id"] as string;
-                        if (jobId != null)
+                        result = ToolProfiles.DenyMessage(call.Name);
+                    }
+                    else
+                    {
+                        // Throttle devmind_task_status polls for the same job_id.
+                        if (call.Name == "devmind_task_status" && _pollThrottleSeconds > 0)
                         {
-                            if (_lastPollTimeByJobId.TryGetValue(jobId, out var lastPoll))
+                            string? jobId = args["job_id"] as string;
+                            if (jobId != null)
                             {
-                                var elapsed = DateTime.UtcNow - lastPoll;
-                                var throttleWindow = TimeSpan.FromSeconds(_pollThrottleSeconds);
-                                if (elapsed < throttleWindow)
+                                if (_lastPollTimeByJobId.TryGetValue(jobId, out var lastPoll))
                                 {
-                                    var remaining = throttleWindow - elapsed;
-                                    if (!ct.IsCancellationRequested)
+                                    var elapsed = DateTime.UtcNow - lastPoll;
+                                    var throttleWindow = TimeSpan.FromSeconds(_pollThrottleSeconds);
+                                    if (elapsed < throttleWindow)
                                     {
-                                        await Task.Delay(remaining, ct);
+                                        var remaining = throttleWindow - elapsed;
+                                        if (!ct.IsCancellationRequested)
+                                        {
+                                            await Task.Delay(remaining, ct);
+                                        }
                                     }
                                 }
+                                _lastPollTimeByJobId[jobId] = DateTime.UtcNow;
                             }
-                            _lastPollTimeByJobId[jobId] = DateTime.UtcNow;
                         }
+                        result = await _tools.CallToolAsync(call.Name, args, ct).WaitAsync(ct);
                     }
-                    result = await _tools.CallToolAsync(call.Name, args, ct);
+
+                    onToolCall(call.Name, call.Input.ToJsonString());
+                    onToolResult?.Invoke(call.Name, call.Input.ToJsonString(), result);
+                    callResults.Add((call, result));
+
+                    // Capture delegation lifecycle.
+                    CaptureDelegation(call.Name, args, result);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // History-consistency: append "[cancelled by user]" tool results for all
+                // outstanding tool calls (those not yet completed) so the next turn has
+                // balanced history (every tool_calls needs tool results).
+                var completedIds = new HashSet<string>(callResults.Select(cr => cr.Call.Id));
+                var outstandingCalls = response.ToolCalls.Where(tc => !completedIds.Contains(tc.Id)).ToList();
 
-                onToolCall(call.Name, call.Input.ToJsonString());
-                onToolResult?.Invoke(call.Name, call.Input.ToJsonString(), result);
-                callResults.Add((call, result));
+                if (outstandingCalls.Count > 0)
+                {
+                    var cancelledResults = outstandingCalls
+                        .Select(tc => (tc, "[cancelled by user]"))
+                        .ToList();
 
-                // Capture delegation lifecycle.
-                CaptureDelegation(call.Name, args, result);
+                    // Merge completed + cancelled results
+                    var allResults = callResults.Concat(cancelledResults).ToList();
+
+                    // Build tool result message(s) via the provider for ALL calls.
+                    var cancelledToolResultMessages = _llm.BuildToolResultsMessages(allResults);
+                    foreach (var toolResultMsg in cancelledToolResultMessages)
+                    {
+                        _history.Add(toolResultMsg);
+                        var contentJson = ExtractContentJson(toolResultMsg);
+                        await _store.AppendMessageAsync(_conversationId, "user", contentJson);
+                    }
+                }
+                else if (callResults.Count > 0)
+                {
+                    // All tools completed before cancellation — still build results normally.
+                    var completedToolResultMessages = _llm.BuildToolResultsMessages(callResults);
+                    foreach (var toolResultMsg in completedToolResultMessages)
+                    {
+                        _history.Add(toolResultMsg);
+                        var contentJson = ExtractContentJson(toolResultMsg);
+                        await _store.AppendMessageAsync(_conversationId, "user", contentJson);
+                    }
+                }
+                throw;
             }
 
             // Build tool result message(s) via the provider.

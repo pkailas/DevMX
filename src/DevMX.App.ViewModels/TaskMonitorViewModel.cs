@@ -12,6 +12,7 @@ public partial class TaskMonitorViewModel : ObservableObject
     private Func<string, Task<string>>? _pollTaskFunc;
     private Func<string, Task<string>>? _fetchResultFunc;
     private Func<string, Task<string>>? _fetchDiffFunc;
+    private Func<string, Task>? _cancelTaskFunc;
     private Action<string, string>? _openDiffTab;
 
     [ObservableProperty]
@@ -55,6 +56,17 @@ public partial class TaskMonitorViewModel : ObservableObject
         foreach (var task in Tasks)
         {
             task.SetOpenDiffTabCallback(callback);
+        }
+    }
+
+    /// <summary>Set the callback for cancelling a task via MCP.</summary>
+    internal void SetCancelTaskCallback(Func<string, Task> callback)
+    {
+        _cancelTaskFunc = callback;
+        // Wire up all existing task items
+        foreach (var task in Tasks)
+        {
+            task.SetCancelTaskCallback(callback);
         }
     }
 
@@ -203,6 +215,7 @@ public partial class TaskMonitorViewModel : ObservableObject
 
             var item = new TaskItemViewModel(jobId, state, detail, isLive);
             item.SetOpenDiffTabCallback(_openDiffTab!);
+            item.SetCancelTaskCallback(_cancelTaskFunc!);
             Tasks.Insert(0, item);
         });
     }
@@ -256,10 +269,11 @@ public partial class TaskMonitorViewModel : ObservableObject
                 var item = new TaskItemViewModel(del.JobId, state, del.Brief, isLive: false);
                 if (!string.IsNullOrEmpty(del.JournalJson))
                 {
-                    item.JournalText = del.JournalJson;
+                item.JournalText = del.JournalJson;
                     item.ParseChangedFilesFromJournal();
                 }
                 item.SetOpenDiffTabCallback(_openDiffTab!);
+                item.SetCancelTaskCallback(_cancelTaskFunc!);
                 Tasks.Add(item);
             }
             // Clear selection when repopulating

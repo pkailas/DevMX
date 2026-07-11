@@ -61,6 +61,7 @@ public partial class MainViewModel : ObservableObject
         {
             _dispatch(() => Viewer.OpenDiffTab(title, diffText));
         });
+        TaskMonitor.SetCancelTaskCallback(async (jobId) => await session.CancelTaskAsync(jobId));
 
         // Wire viewer callbacks into ChatViewModel
         chatVm.SetOpenDiffTabCallback((title, diffText) =>
