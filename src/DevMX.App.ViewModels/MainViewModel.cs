@@ -23,6 +23,9 @@ public partial class MainViewModel : ObservableObject
     private string statusText = "Initializing...";
 
     [ObservableProperty]
+    private string windowTitle = "DevMX";
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool isBusy;
 
@@ -132,6 +135,7 @@ public partial class MainViewModel : ObservableObject
             _dispatch(() =>
             {
                 StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
+                WindowTitle = $"DevMX — {_settings.WorkDir}";
                 Chat.SetInitialized(true);
                 IsBusy = false;
             });
@@ -313,6 +317,7 @@ public partial class MainViewModel : ObservableObject
         _dispatch(() =>
         {
             StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
+                WindowTitle = $"DevMX — {_settings.WorkDir}";
             Chat.SetInitialized(true);
             IsBusy = false;
         });
