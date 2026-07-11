@@ -107,6 +107,51 @@ public partial class ChatViewModel : ObservableObject
         return null;
     }
 
+    /// <summary>Extracts the job_id from devmind_task_status arg JSON.</summary>
+    private static string? ExtractJobId(string argJson)
+    {
+        try
+        {
+            var obj = JsonNode.Parse(argJson)?.AsObject();
+            return obj?["job_id"]?.GetValue<string>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Extracts the job_id from a collapsed entry text like "[tool] devmind_task_status({"job_id":"job-1"}) \u00d73".</summary>
+    private static string? ExtractJobIdFromEntryText(string entryText)
+    {
+        try
+        {
+            // Find the JSON args portion between the first '(' and the matching ')'
+            int openParen = entryText.IndexOf('(');
+            if (openParen < 0) return null;
+
+            // Find the closing paren — need to handle nested braces
+            int depth = 0;
+            int closeParen = -1;
+            for (int i = openParen; i < entryText.Length; i++)
+            {
+                char c = entryText[i];
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+                else if (c == ')' && depth == 0) { closeParen = i; break; }
+            }
+            if (closeParen < 0) return null;
+
+            string jsonPart = entryText.Substring(openParen + 1, closeParen - openParen - 1);
+            var obj = JsonNode.Parse(jsonPart)?.AsObject();
+            return obj?["job_id"]?.GetValue<string>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>Command to open a file from a clickable tool entry.</summary>
     [RelayCommand]
     private async Task OpenToolFileAsync(ChatEntryViewModel entry)
@@ -203,6 +248,45 @@ public partial class ChatViewModel : ObservableObject
                     var filePath = ExtractFilePath(name, argJson);
                     _dispatch(() =>
                     {
+                        // Collapse consecutive devmind_task_status calls for the same job_id
+                        if (name == "devmind_task_status" && Entries.Count > 0)
+                        {
+                            var lastEntry = Entries[^1];
+                            if (lastEntry.Kind == ChatEntryKind.Tool && lastEntry.Text.StartsWith("[tool] devmind_task_status("))
+                            {
+                                // Extract job_id from the new call
+                                string? newJobId = ExtractJobId(argJson);
+                                // Extract job_id from the last entry's text
+                                string? lastJobId = ExtractJobIdFromEntryText(lastEntry.Text);
+
+                                if (newJobId != null && lastJobId != null && newJobId == lastJobId)
+                                {
+                                    // Increment the collapse count
+                                    string currentText = lastEntry.Text;
+                                    int multiplyIdx = currentText.LastIndexOf("\u00d7");
+                                    if (multiplyIdx >= 0)
+                                    {
+                                        // Already collapsed — increment count
+                                        int countStart = multiplyIdx + 1;
+                                        if (int.TryParse(currentText[countStart..], out int count))
+                                        {
+                                            lastEntry.SetText(currentText[..countStart] + (count + 1));
+                                        }
+                                        else
+                                        {
+                                            lastEntry.SetText(currentText[..countStart] + "2");
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // First collapse — add ×2
+                                        lastEntry.SetText(lastEntry.Text + " \u00d72");
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+
                         Entries.Add(new ChatEntryViewModel(ChatEntryKind.Tool, $"[tool] {name}({argTrunc})", filePath));
                     });
                 },

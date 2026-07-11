@@ -23,7 +23,8 @@ public class DevMxSettingsTests
                 Provider = "anthropic",
                 WorkDir = @"C:\my\work",
                 ServerExe = @"C:\custom\server.exe",
-                Theme = "light"
+                Theme = "light",
+                PollThrottleSeconds = 7
             };
 
             // Save to temp location
@@ -49,6 +50,7 @@ public class DevMxSettingsTests
             Assert.Equal(original.WorkDir, loaded.WorkDir);
             Assert.Equal(original.ServerExe, loaded.ServerExe);
             Assert.Equal(original.Theme, loaded.Theme);
+            Assert.Equal(original.PollThrottleSeconds, loaded.PollThrottleSeconds);
         }
         finally
         {
@@ -69,6 +71,7 @@ public class DevMxSettingsTests
         Assert.Equal(DevMxSettings.DefaultWorkDir, settings.WorkDir);
         Assert.Equal(DevMxSettings.DefaultServerExe, settings.ServerExe);
         Assert.Equal("dark", settings.Theme);
+        Assert.Equal(5, settings.PollThrottleSeconds);
     }
 
     [Fact]
@@ -304,5 +307,56 @@ public class DevMxSettingsTests
         var result = (string)method.Invoke(null, new object[] { "/work", "full" })!;
         Assert.True(result.Contains("read, write, and analyze"), $"Expected 'read, write, and analyze' in: {result}");
         Assert.False(result.Contains("read-only"), $"Did not expect 'read-only' in: {result}");
+    }
+
+    [Fact]
+    public void AppSession_ClampPollThrottle_ClampsToRange()
+    {
+        var method = typeof(AppSession).GetMethod("ClampPollThrottle",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // 999 → 60
+        Assert.Equal(60, method.Invoke(null, new object[] { 999 }));
+        // -3 → 0
+        Assert.Equal(0, method.Invoke(null, new object[] { -3 }));
+        // 5 → 5 (in range)
+        Assert.Equal(5, method.Invoke(null, new object[] { 5 }));
+        // 0 → 0 (boundary)
+        Assert.Equal(0, method.Invoke(null, new object[] { 0 }));
+        // 60 → 60 (boundary)
+        Assert.Equal(60, method.Invoke(null, new object[] { 60 }));
+    }
+
+    [Fact]
+    public void SettingsViewModel_PollThrottleSeconds_NonNumericRevertsOnApply()
+    {
+        var settings = new DevMxSettings { PollThrottleSeconds = 5 };
+        bool applied = false;
+        var vm = new SettingsViewModel(settings, () => applied = true);
+
+        Assert.Equal("5", vm.PollThrottleSeconds);
+
+        // Set non-numeric value
+        vm.PollThrottleSeconds = "abc";
+        vm.ApplyCommand.Execute(null);
+
+        Assert.True(applied);
+        // Should keep existing value (5) since "abc" is not valid
+        Assert.Equal(5, settings.PollThrottleSeconds);
+    }
+
+    [Fact]
+    public void SettingsViewModel_PollThrottleSeconds_ValidIntegerPersists()
+    {
+        var settings = new DevMxSettings { PollThrottleSeconds = 5 };
+        bool applied = false;
+        var vm = new SettingsViewModel(settings, () => applied = true);
+
+        vm.PollThrottleSeconds = "10";
+        vm.ApplyCommand.Execute(null);
+
+        Assert.True(applied);
+        Assert.Equal(10, settings.PollThrottleSeconds);
     }
 }

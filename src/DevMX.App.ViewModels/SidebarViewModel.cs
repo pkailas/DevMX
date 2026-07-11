@@ -175,6 +175,41 @@ public partial class SidebarViewModel : ObservableObject
                                         string name = blockObj["name"]?.GetValue<string>() ?? "unknown";
                                         string argsJson = blockObj["input"]?.ToJsonString() ?? "{}";
                                         string argTrunc = argsJson.Length > 120 ? argsJson[..120] + "\u2026" : argsJson;
+
+                                        // Collapse consecutive devmind_task_status for same job_id in history
+                                        if (name == "devmind_task_status" && entries.Count > 0)
+                                        {
+                                            var lastEntry = entries[^1];
+                                            if (lastEntry.Kind == ChatEntryKind.Tool && lastEntry.Text.StartsWith("[tool] devmind_task_status("))
+                                            {
+                                                string? newJobId = ExtractJobIdFromJson(argsJson);
+                                                string? lastJobId = ExtractJobIdFromEntryText(lastEntry.Text);
+                                                if (newJobId != null && lastJobId != null && newJobId == lastJobId)
+                                                {
+                                                    // Increment collapse count
+                                                    string currentText = lastEntry.Text;
+                                                    int multiplyIdx = currentText.LastIndexOf("\u00d7");
+                                                    if (multiplyIdx >= 0)
+                                                    {
+                                                        int countStart = multiplyIdx + 1;
+                                                        if (int.TryParse(currentText[countStart..], out int count))
+                                                        {
+                                                            lastEntry.SetText(currentText[..countStart] + (count + 1));
+                                                        }
+                                                        else
+                                                        {
+                                                            lastEntry.SetText(currentText[..countStart] + "2");
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        lastEntry.SetText(lastEntry.Text + " \u00d72");
+                                                    }
+                                                    continue;
+                                                }
+                                            }
+                                        }
+
                                         entries.Add(new ChatEntryViewModel(ChatEntryKind.Tool, $"[tool] {name}({argTrunc})"));
                                     }
                                     else if (type == "text")
@@ -265,6 +300,49 @@ public partial class SidebarViewModel : ObservableObject
             }
         }
         return null;
+    }
+
+    /// <summary>Extracts job_id from a JSON string (tool args).</summary>
+    private static string? ExtractJobIdFromJson(string argJson)
+    {
+        try
+        {
+            var obj = JsonNode.Parse(argJson)?.AsObject();
+            return obj?["job_id"]?.GetValue<string>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Extracts job_id from a collapsed entry text like "[tool] devmind_task_status({"job_id":"job-1"}) \u00d73".</summary>
+    private static string? ExtractJobIdFromEntryText(string entryText)
+    {
+        try
+        {
+            int openParen = entryText.IndexOf('(');
+            if (openParen < 0) return null;
+
+            int depth = 0;
+            int closeParen = -1;
+            for (int i = openParen; i < entryText.Length; i++)
+            {
+                char c = entryText[i];
+                if (c == '{') depth++;
+                else if (c == '}') depth--;
+                else if (c == ')' && depth == 0) { closeParen = i; break; }
+            }
+            if (closeParen < 0) return null;
+
+            string jsonPart = entryText.Substring(openParen + 1, closeParen - openParen - 1);
+            var obj = JsonNode.Parse(jsonPart)?.AsObject();
+            return obj?["job_id"]?.GetValue<string>();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>Fired when a provider mismatch is detected during conversation switch.</summary>

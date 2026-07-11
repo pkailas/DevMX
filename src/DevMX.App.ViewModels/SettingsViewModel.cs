@@ -31,6 +31,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string toolProfile;
 
+    [ObservableProperty]
+    private string pollThrottleSeconds;
+
     public string ServerExe => _settings.ServerExe;
     public string ApiKeySource => _settings.Provider == "anthropic"
         ? "ANTHROPIC_API_KEY (environment variable)"
@@ -57,6 +60,7 @@ public partial class SettingsViewModel : ObservableObject
         WorkDir = settings.WorkDir;
         Theme = settings.Theme;
         ToolProfile = settings.ToolProfile;
+        PollThrottleSeconds = settings.PollThrottleSeconds.ToString();
     }
 
     protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
@@ -93,6 +97,14 @@ public partial class SettingsViewModel : ObservableObject
         _settings.WorkDir = WorkDir;
         _settings.Theme = Theme;
         _settings.ToolProfile = ToolProfile;
+
+        // Validate PollThrottleSeconds — ignore non-numeric input (revert to current)
+        if (int.TryParse(PollThrottleSeconds, out int throttleVal))
+        {
+            _settings.PollThrottleSeconds = throttleVal;
+        }
+        // else: keep existing value (ignore/revert non-numeric)
+
         _settings.Save();
         _onApply();
     }

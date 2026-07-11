@@ -18,6 +18,7 @@ public sealed record DevMxSettings
     public string Provider { get; set; } = "openai";
     public string Theme { get; set; } = "dark";
     public string ToolProfile { get; set; } = "auto";
+    public int PollThrottleSeconds { get; set; } = 5;
 
     public static string DefaultSettingsPath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DevMX", "settings.json");

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -439,5 +440,127 @@ public class AgenticLoopTests : IDisposable
             Calls.Add((name, args));
             return Task.FromResult("EXECUTED");
         }
+    }
+
+    // --- Throttle tests ---
+
+    // Fake executor that exposes devmind_task_status
+    private sealed class FakeToolExecutorWithStatus : IMcpToolExecutor
+    {
+        public List<(string Name, IReadOnlyDictionary<string, object?> Args)> Calls { get; } = new();
+
+        public Task<IReadOnlyList<ToolDefinition>> ListToolDefinitionsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<ToolDefinition>>(new List<ToolDefinition>
+            {
+                new("devmind_task_status", "Check task status", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() }),
+                new("read_file", "Read a file", new JsonObject { ["type"] = "object", ["properties"] = new JsonObject() })
+            });
+        }
+
+        public Task<string> CallToolAsync(string name, IReadOnlyDictionary<string, object?> args, CancellationToken ct = default)
+        {
+            Calls.Add((name, args));
+            return Task.FromResult("{\"state\":\"running\"}");
+        }
+    }
+
+    [Fact]
+    public async Task PollThrottle_SameJobId_DelaysSecondCall()
+    {
+        // Arrange — pollThrottleSeconds=1 so the test runs fast
+        var statusInput1 = new JsonObject { ["job_id"] = "job-1" };
+        var statusInput2 = new JsonObject { ["job_id"] = "job-1" };
+
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "devmind_task_status", statusInput1),
+            "tool_use");
+        var toolUseResponse2 = MakeResponse(
+            MakeToolUseContent("toolu_02", "devmind_task_status", statusInput2),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+
+        var handler = new StubHttpHandler(toolUseResponse, toolUseResponse2, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new FakeToolExecutorWithStatus();
+        var loop = new AgenticLoop(client, executor, store, convId, null, 50, ToolProfiles.Full, pollThrottleSeconds: 1);
+
+        // Act
+        var sw = Stopwatch.StartNew();
+        await loop.RunTurnAsync("Check status", _ => { }, (_, _) => { }, default);
+        sw.Stop();
+
+        // Assert: two calls executed, total time >= 1s (first instant, second throttled by ~1s)
+        Assert.Equal(2, executor.Calls.Count);
+        Assert.True(sw.ElapsedMilliseconds >= 900, $"Expected >=900ms but got {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public async Task PollThrottle_DifferentJobId_NoDelay()
+    {
+        // Arrange
+        var statusInput1 = new JsonObject { ["job_id"] = "job-1" };
+        var statusInput2 = new JsonObject { ["job_id"] = "job-2" };
+
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "devmind_task_status", statusInput1),
+            "tool_use");
+        var toolUseResponse2 = MakeResponse(
+            MakeToolUseContent("toolu_02", "devmind_task_status", statusInput2),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+
+        var handler = new StubHttpHandler(toolUseResponse, toolUseResponse2, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new FakeToolExecutorWithStatus();
+        var loop = new AgenticLoop(client, executor, store, convId, null, 50, ToolProfiles.Full, pollThrottleSeconds: 5);
+
+        // Act
+        var sw = Stopwatch.StartNew();
+        await loop.RunTurnAsync("Check status", _ => { }, (_, _) => { }, default);
+        sw.Stop();
+
+        // Assert: two calls, no throttle delay (different job_ids)
+        Assert.Equal(2, executor.Calls.Count);
+        Assert.True(sw.ElapsedMilliseconds < 2000, $"Expected <2000ms but got {sw.ElapsedMilliseconds}ms — different job_ids should not throttle");
+    }
+
+    [Fact]
+    public async Task PollThrottle_OtherTool_NoDelay()
+    {
+        // Arrange — read_file should NOT be throttled
+        var readInput = new JsonObject { ["filename"] = "x.cs" };
+
+        var toolUseResponse = MakeResponse(
+            MakeToolUseContent("toolu_01", "read_file", readInput),
+            "tool_use");
+        var finalResponse = MakeResponse(MakeTextContent("Done!"), "end_turn");
+
+        var handler = new StubHttpHandler(toolUseResponse, finalResponse);
+        var client = new AnthropicClient("key", "model", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("anthropic", "model", "/work");
+
+        var executor = new FakeToolExecutor
+        {
+            ToolResults = { ["read_file"] = "FILE CONTENT" }
+        };
+        var loop = new AgenticLoop(client, executor, store, convId, null, 50, ToolProfiles.Full, pollThrottleSeconds: 5);
+
+        // Act
+        var sw = Stopwatch.StartNew();
+        await loop.RunTurnAsync("Read file", _ => { }, (_, _) => { }, default);
+        sw.Stop();
+
+        // Assert: tool executed, no throttle delay
+        Assert.Single(executor.Calls);
+        Assert.Equal("read_file", executor.Calls[0].Name);
+        Assert.True(sw.ElapsedMilliseconds < 2000, $"Expected <2000ms but got {sw.ElapsedMilliseconds}ms — non-status tools should not throttle");
     }
 }

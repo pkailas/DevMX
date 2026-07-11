@@ -1,3 +1,6 @@
+// DevMX.Chat — Console REPL connecting to the DevMind MCP tool server.
+// Supports OpenAI/Anthropic LLM providers, auto-discovers models, persists conversations via SQLite, and drives an agentic coding loop.
+
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Nodes;

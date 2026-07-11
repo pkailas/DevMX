@@ -190,11 +190,14 @@ public sealed class AppSession : IAsyncDisposable
         Console.WriteLine($"[AppSession] Created conversation #{ConversationId}");
 
         // 7. Create initial AgenticLoop with tool profile
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, effectiveProfile);
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, effectiveProfile, ClampPollThrottle(_settings.PollThrottleSeconds));
 
         IsInitialized = true;
         Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model} | provider={provider} | profile={effectiveProfile}");
     }
+
+    /// <summary>Clamps poll throttle seconds to 0..60.</summary>
+    private static int ClampPollThrottle(int value) => Math.Clamp(value, 0, 60);
 
     private static IChatProvider CreateProvider(string provider, string endpoint, string model)
     {
@@ -218,7 +221,7 @@ public sealed class AppSession : IAsyncDisposable
 
         ConversationId = conversationId;
         var history = await AgenticLoop.LoadHistoryAsync(_store, conversationId);
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history, EffectiveToolProfile);
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history, EffectiveToolProfile, ClampPollThrottle(_settings.PollThrottleSeconds));
         Console.WriteLine($"[AppSession] Opened conversation #{conversationId} ({history.Count} messages)");
     }
 
@@ -385,7 +388,7 @@ public sealed class AppSession : IAsyncDisposable
             throw new InvalidOperationException("AppSession not initialized.");
 
         ConversationId = await _store.CreateConversationAsync(_settings.Provider, Model!, _settings.WorkDir, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}");
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt);
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, EffectiveToolProfile, ClampPollThrottle(_settings.PollThrottleSeconds));
         Console.WriteLine($"[AppSession] New conversation #{ConversationId}");
         return ConversationId;
     }

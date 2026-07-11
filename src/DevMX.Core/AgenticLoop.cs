@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -22,6 +23,8 @@ public sealed class AgenticLoop
     private readonly int _maxIterations;
     private readonly List<JsonNode> _history;
     private readonly string _toolProfile;
+    private readonly int _pollThrottleSeconds;
+    private readonly Dictionary<string, DateTime> _lastPollTimeByJobId = new();
 
     /// <summary>
     /// Creates a new AgenticLoop starting with an empty conversation history.
@@ -33,8 +36,9 @@ public sealed class AgenticLoop
         long conversationId,
         string? systemPrompt = null,
         int maxIterations = 50,
-        string toolProfile = ToolProfiles.Full)
-        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>(), toolProfile)
+        string toolProfile = ToolProfiles.Full,
+        int pollThrottleSeconds = 5)
+        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>(), toolProfile, pollThrottleSeconds)
     {
     }
 
@@ -49,7 +53,8 @@ public sealed class AgenticLoop
         string? systemPrompt,
         int maxIterations,
         List<JsonNode> history,
-        string toolProfile = ToolProfiles.Full)
+        string toolProfile = ToolProfiles.Full,
+        int pollThrottleSeconds = 5)
     {
         _llm = llm;
         _tools = tools;
@@ -59,6 +64,7 @@ public sealed class AgenticLoop
         _maxIterations = maxIterations;
         _history = history;
         _toolProfile = toolProfile;
+        _pollThrottleSeconds = pollThrottleSeconds;
     }
 
     /// <summary>
@@ -140,6 +146,28 @@ public sealed class AgenticLoop
                 }
                 else
                 {
+                    // Throttle devmind_task_status polls for the same job_id.
+                    if (call.Name == "devmind_task_status" && _pollThrottleSeconds > 0)
+                    {
+                        string? jobId = args["job_id"] as string;
+                        if (jobId != null)
+                        {
+                            if (_lastPollTimeByJobId.TryGetValue(jobId, out var lastPoll))
+                            {
+                                var elapsed = DateTime.UtcNow - lastPoll;
+                                var throttleWindow = TimeSpan.FromSeconds(_pollThrottleSeconds);
+                                if (elapsed < throttleWindow)
+                                {
+                                    var remaining = throttleWindow - elapsed;
+                                    if (!ct.IsCancellationRequested)
+                                    {
+                                        await Task.Delay(remaining, ct);
+                                    }
+                                }
+                            }
+                            _lastPollTimeByJobId[jobId] = DateTime.UtcNow;
+                        }
+                    }
                     result = await _tools.CallToolAsync(call.Name, args, ct);
                 }
 

@@ -354,10 +354,20 @@
                      <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding Settings.ToolProfile}" Value="restricted"><Setter Property="Background" Value="{DynamicResource AccentBrush}"/><Setter Property="Foreground" Value="White"/></DataTrigger></Style.Triggers></Style></Button.Style>
                    </Button>
                  </StackPanel>
-                 <TextBlock Text="applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="0,2,0,0"/>
-               </StackPanel>
+                  <TextBlock Text="applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="0,2,0,0"/>
+                </StackPanel>
 
-               <!-- Read-only info -->
+                <!-- Poll delay -->
+                <StackPanel Margin="0,4">
+                  <TextBlock Text="Poll delay (s)" FontSize="10" Foreground="{DynamicResource DimBrush}"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <TextBox Text="{Binding Settings.PollThrottleSeconds, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="11" Padding="4,2" Width="60"/>
+                    <TextBlock Text="0 = off, applies on reconnect" FontSize="9" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="6,0,0,3" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </StackPanel>
+
+                <!-- Read-only info -->
                <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
                 <StackPanel>
                   <TextBlock FontSize="10" Foreground="{DynamicResource DimBrush}">

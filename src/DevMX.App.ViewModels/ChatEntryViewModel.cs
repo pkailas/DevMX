@@ -28,4 +28,10 @@ public partial class ChatEntryViewModel : ObservableObject
     {
         Text += chunk;
     }
+
+    /// <summary>Replaces the current text content.</summary>
+    public void SetText(string newText)
+    {
+        Text = newText;
+    }
 }
