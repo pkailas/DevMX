@@ -210,7 +210,7 @@
         </StackPanel>
 
         <!-- Expanded rail (260px wide, sidebar content) -->
-        <ScrollViewer x:Name="ExpandedRail" Width="260" Visibility="Collapsed"
+        <ScrollViewer x:Name="ExpandedRail" Width="300" Visibility="Collapsed"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Background="{DynamicResource PanelBackground}"
                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
