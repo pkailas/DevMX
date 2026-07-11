@@ -199,16 +199,23 @@ public sealed class AppSession : IAsyncDisposable
     /// <summary>Clamps poll throttle seconds to 0..60.</summary>
     private static int ClampPollThrottle(int value) => Math.Clamp(value, 0, 60);
 
+    /// <summary>Reads an env var from process scope, falling back to User/Machine registry scope
+    /// (a setx after launch, or a launcher with a stale environment, otherwise loses the key).</summary>
+    private static string? GetEnvVar(string name) =>
+        Environment.GetEnvironmentVariable(name)
+        ?? Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.User)
+        ?? Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
+
     private static IChatProvider CreateProvider(string provider, string endpoint, string model)
     {
         if (provider == "anthropic")
         {
-            string key = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") ?? "";
+            string key = GetEnvVar("ANTHROPIC_API_KEY") ?? "";
             if (string.IsNullOrEmpty(key))
                 throw new InvalidOperationException("ANTHROPIC_API_KEY environment variable is not set.");
             return new AnthropicClient(key, model);
         }
-        return new OpenAiCompatClient(endpoint, Environment.GetEnvironmentVariable("OPENAI_COMPAT_API_KEY"), model);
+        return new OpenAiCompatClient(endpoint, GetEnvVar("OPENAI_COMPAT_API_KEY"), model);
     }
 
     /// <summary>

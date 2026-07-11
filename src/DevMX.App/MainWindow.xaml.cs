@@ -255,4 +255,65 @@ public partial class MainWindow : Window
             System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
+    private void MenuRebuildRestart_Click(object sender, RoutedEventArgs e)
+    {
+        // Confirm with user
+        var result = System.Windows.MessageBox.Show(
+            "Rebuild from source, run tests, redeploy and restart DevMX?",
+            "Rebuild && Restart",
+            System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (result != System.Windows.MessageBoxResult.Yes)
+            return;
+
+        // Resolve RepoRoot by walking up from AppContext.BaseDirectory
+        string? repoRoot = null;
+        string dir = System.IO.Path.GetDirectoryName(AppContext.BaseDirectory)!;
+        for (int i = 0; i < 20; i++)
+        {
+            if (System.IO.File.Exists(System.IO.Path.Combine(dir, "DevMX.sln")))
+            {
+                repoRoot = dir;
+                break;
+            }
+            var parent = System.IO.Path.GetDirectoryName(dir);
+            if (parent == null) break;
+            dir = parent;
+        }
+
+        if (repoRoot == null)
+        {
+            System.Windows.MessageBox.Show(
+                "Could not locate DevMX.sln - cannot determine repository root.",
+                "Rebuild && Restart",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            return;
+        }
+
+        var updateScript = System.IO.Path.Combine(repoRoot, "scripts", "update.ps1");
+        if (!System.IO.File.Exists(updateScript))
+        {
+            System.Windows.MessageBox.Show(
+                $"Update script not found at: {updateScript}",
+                "Rebuild && Restart",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            return;
+        }
+
+        // Launch detached update script
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{updateScript}\" -AppPid {System.Environment.ProcessId} -RepoRoot \"{repoRoot}\"",
+            UseShellExecute = true,
+            WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
+        };
+        System.Diagnostics.Process.Start(psi);
+
+        // Shutdown the app - the Window.Closing handler will run the normal dispose flow
+        Application.Current.Shutdown();
+    }
+
 }

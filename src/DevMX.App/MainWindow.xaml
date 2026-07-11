@@ -188,6 +188,8 @@
         <MenuItem Header="_Reconnect" Command="{Binding ReconnectCommand}"/>
         <Separator/>
         <MenuItem Header="Open _Settings" Click="MenuOpenSettings_Click"/>
+        <Separator/>
+        <MenuItem Header="Rebuild &amp;&amp; Restart" Click="MenuRebuildRestart_Click"/>
       </MenuItem>
       <!-- Help -->
       <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItem}">
