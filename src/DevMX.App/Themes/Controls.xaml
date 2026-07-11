@@ -125,6 +125,7 @@
   </Style>
 
   <Style TargetType="ListBoxItem">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
     <Setter Property="Padding" Value="6,4"/>
@@ -135,7 +136,7 @@
           <Border Name="Bd" Background="{TemplateBinding Background}"
                   Padding="{TemplateBinding Padding}"
                   SnapsToDevicePixels="True">
-            <ContentPresenter/>
+            <ContentPresenter HorizontalAlignment="Stretch"/>
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsSelected" Value="True">
@@ -159,22 +160,51 @@
   <!-- ===== SCROLLBAR ===== -->
   <Style TargetType="ScrollBar">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="Foreground" Value="{DynamicResource DimBrush}"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-    <Setter Property="Width" Value="10"/>
+    <Setter Property="Width" Value="8"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ScrollBar">
           <Grid Background="{TemplateBinding Background}">
             <Track Name="PART_Track" IsDirectionReversed="True">
               <Track.Thumb>
-                <Thumb Background="{TemplateBinding Foreground}"/>
+                <Thumb>
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Border Background="{DynamicResource DimBrush}" CornerRadius="4" Opacity="0.55" Margin="1"/>
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
               </Track.Thumb>
             </Track>
           </Grid>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
+    <Style.Triggers>
+      <Trigger Property="Orientation" Value="Horizontal">
+        <Setter Property="Width" Value="Auto"/>
+        <Setter Property="Height" Value="8"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ScrollBar">
+              <Grid Background="{TemplateBinding Background}">
+                <Track Name="PART_Track" IsDirectionReversed="False">
+                  <Track.Thumb>
+                    <Thumb>
+                      <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                          <Border Background="{DynamicResource DimBrush}" CornerRadius="4" Opacity="0.55" Margin="1"/>
+                        </ControlTemplate>
+                      </Thumb.Template>
+                    </Thumb>
+                  </Track.Thumb>
+                </Track>
+              </Grid>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Trigger>
+    </Style.Triggers>
   </Style>
 
   <!-- ===== PROGRESSBAR ===== -->

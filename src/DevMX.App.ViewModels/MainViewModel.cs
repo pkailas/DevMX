@@ -143,8 +143,8 @@ public partial class MainViewModel : ObservableObject
             },
             SetSearchText = (term) => { Sidebar.SearchText = term; },
             ExpandSidebar = () => { IsSidebarExpanded = true; },
-            SetTheme = (theme) => { Settings.SetThemeCommand.Execute(theme); },
-            SetToolProfile = (profile) => { Settings.SetToolProfileCommand.Execute(profile); },
+            SetTheme = (theme) => { Settings?.SetThemeCommand?.Execute(theme); },
+            SetToolProfile = (profile) => { Settings?.SetToolProfileCommand?.Execute(profile); },
             SetPollThrottle = (value) => { _settings.PollThrottleSeconds = value; _settings.Save(); },
             AddInfoEntry = (text) => AddInfoEntry(text),
             ClearInputText = () =>
@@ -405,8 +405,8 @@ public partial class MainViewModel : ObservableObject
             },
             SetSearchText = (term) => { newSidebar.SearchText = term; },
             ExpandSidebar = () => { IsSidebarExpanded = true; },
-            SetTheme = (theme) => { Settings.SetThemeCommand.Execute(theme); },
-            SetToolProfile = (profile) => { Settings.SetToolProfileCommand.Execute(profile); },
+            SetTheme = (theme) => { Settings?.SetThemeCommand?.Execute(theme); },
+            SetToolProfile = (profile) => { Settings?.SetToolProfileCommand?.Execute(profile); },
             SetPollThrottle = (value) => { _settings.PollThrottleSeconds = value; _settings.Save(); },
             AddInfoEntry = (text) =>
             {

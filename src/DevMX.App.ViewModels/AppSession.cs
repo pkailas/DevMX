@@ -343,7 +343,7 @@ public sealed class AppSession : IAsyncDisposable
         {
             var tools = await _mcp.ListToolsAsync();
             var diffTool = tools.FirstOrDefault(t => t.ProtocolTool.Name == "diff_file");
-            if (diffTool?.ProtocolTool.InputSchema.ValueKind != System.Text.Json.JsonValueKind.Undefined)
+            if (diffTool != null && diffTool.ProtocolTool.InputSchema.ValueKind != System.Text.Json.JsonValueKind.Undefined)
             {
                 var schema = System.Text.Json.Nodes.JsonNode.Parse(diffTool.ProtocolTool.InputSchema.GetRawText())
                     as System.Text.Json.Nodes.JsonObject;

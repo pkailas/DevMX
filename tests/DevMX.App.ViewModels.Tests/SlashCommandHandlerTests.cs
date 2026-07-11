@@ -18,7 +18,7 @@ public class SlashCommandHandlerTests
     private string? _themeSet;
     private string? _profileSet;
     private int? _pollThrottleSet;
-    private bool _inputCleared;
+
     private readonly SlashCommandHandler _handler;
 
     public SlashCommandHandlerTests()
@@ -38,7 +38,7 @@ public class SlashCommandHandlerTests
             SetToolProfile = (profile) => { _profileSet = profile; },
             SetPollThrottle = (value) => { _pollThrottleSet = value; },
             AddInfoEntry = (text) => { _infoEntries.Add(text); },
-            ClearInputText = () => { _inputCleared = true; }
+            ClearInputText = () => { }
         };
         _handler = new SlashCommandHandler(callbacks);
     }
@@ -58,7 +58,7 @@ public class SlashCommandHandlerTests
         _themeSet = null;
         _profileSet = null;
         _pollThrottleSet = null;
-        _inputCleared = false;
+
     }
 
     // === /help ===

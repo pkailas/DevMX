@@ -263,9 +263,10 @@
           </Border>
 
           <!-- Conversation list -->
-          <ListBox ItemsSource="{Binding Sidebar.Conversations}"
-                   SelectedItem="{Binding Sidebar.SelectedConversation}"
-                   Margin="4,0" BorderThickness="0"
+<ListBox ItemsSource="{Binding Sidebar.Conversations}"
+                    SelectedItem="{Binding Sidebar.SelectedConversation}"
+                    HorizontalAlignment="Left" Width="240"
+                    Margin="4,0" BorderThickness="0"
                    SelectionChanged="ConversationListBox_SelectionChanged">
             <ListBox.ItemTemplate>
               <DataTemplate>
@@ -554,8 +555,8 @@
                   ShowLineNumbers="True"
                   FontFamily="{DynamicResource MonospaceFontFamily}"
                   FontSize="12"
-                  WordWrap="False"
-                  HorizontalScrollBarVisibility="Auto"
+                  WordWrap="True"
+                  HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
                   BorderThickness="0"
                   Padding="4"
