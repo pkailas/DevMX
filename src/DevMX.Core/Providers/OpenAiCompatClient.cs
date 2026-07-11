@@ -141,17 +141,28 @@ public sealed class OpenAiCompatClient : IChatProvider
                 var argsStr = func?["arguments"]?.GetValue<string>() ?? "";
 
                 // Parse arguments string into JsonObject; empty/whitespace → empty object.
+                // Guard against malformed JSON (e.g. leading-zero numbers) so the turn is not killed.
                 JsonObject input;
+                string? parseError = null;
                 if (string.IsNullOrWhiteSpace(argsStr))
                 {
                     input = new JsonObject();
                 }
                 else
                 {
-                    input = (JsonNode.Parse(argsStr) as JsonObject) ?? new JsonObject();
+                    try
+                    {
+                        input = (JsonNode.Parse(argsStr) as JsonObject) ?? new JsonObject();
+                    }
+                    catch (Exception parseEx)
+                    {
+                        input = new JsonObject();
+                        var rawPreview = argsStr.Length > 200 ? argsStr.Substring(0, 200) : argsStr;
+                        parseError = $"{parseEx.Message} | raw: {rawPreview}";
+                    }
                 }
 
-                toolCalls.Add(new ParsedToolCall(tcId, tcName, input));
+                toolCalls.Add(new ParsedToolCall(tcId, tcName, input, parseError));
             }
         }
 

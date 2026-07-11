@@ -679,6 +679,93 @@ public class AgenticLoopTests : IDisposable
         Assert.Equal("user", messages[0].Role);
     }
 
+    // --- Test: ParseError — malformed JSON args, executor NOT invoked, loop continues ---
+    [Fact]
+    public async Task ParseError_ExecutorNotInvokedAndLoopContinues()
+    {
+        // Arrange — use OpenAiCompatClient since it parses args from a JSON string
+        var malformedArgsResponse = MakeOpenAiToolCallsResponse("call_1", "read_file", "{\"end_line\":07}", "tool_calls");
+        var finalResponse = MakeOpenAiTextResponse("Done", "stop");
+        var handler = new StubHttpHandler(malformedArgsResponse, finalResponse);
+        var client = new OpenAiCompatClient("http://127.0.0.1:8080/v1", null, "gpt-4o", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("openai", "gpt-4o", "/work");
+
+        var executor = new FakeToolExecutor();
+        var loop = new AgenticLoop(client, executor, store, convId, null);
+
+        var toolResults = new List<string>();
+
+        // Act — should not throw
+        await loop.RunTurnAsync("Do something", _ => { }, (_, _) => { }, default, (name, args, result) => toolResults.Add(result));
+
+        // Assert: executor was NOT invoked (ParseError prevented execution)
+        Assert.Empty(executor.Calls);
+
+        // Assert: tool result contains the parse error feedback
+        Assert.Single(toolResults);
+        Assert.Contains("not valid JSON", toolResults[0]);
+
+        // Assert: history is balanced (user, assistant with tool_call, user with tool_result, assistant final)
+        var messages = await store.GetMessagesAsync(convId);
+        Assert.Equal(4, messages.Count);
+        Assert.Equal("user", messages[0].Role);
+        Assert.Equal("assistant", messages[1].Role);
+        Assert.Equal("user", messages[2].Role);
+        Assert.Equal("assistant", messages[3].Role);
+    }
+
+    private static string MakeOpenAiTextResponse(string content, string finishReason = "stop")
+    {
+        var obj = new JsonObject
+        {
+            ["choices"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["index"] = 0,
+                    ["message"] = new JsonObject { ["role"] = "assistant", ["content"] = content },
+                    ["finish_reason"] = finishReason
+                }
+            }
+        };
+        return obj.ToJsonString();
+    }
+
+    private static string MakeOpenAiToolCallsResponse(string toolCallId, string toolName, string argsJson, string finishReason = "tool_calls")
+    {
+        var obj = new JsonObject
+        {
+            ["choices"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["index"] = 0,
+                    ["message"] = new JsonObject
+                    {
+                        ["role"] = "assistant",
+                        ["content"] = null,
+                        ["tool_calls"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["id"] = toolCallId,
+                                ["type"] = "function",
+                                ["function"] = new JsonObject
+                                {
+                                    ["name"] = toolName,
+                                    ["arguments"] = argsJson
+                                }
+                            }
+                        }
+                    },
+                    ["finish_reason"] = finishReason
+                }
+            }
+        };
+        return obj.ToJsonString();
+    }
+
     // --- HTTP handler that blocks until cancelled ---
 
     private sealed class BlockingHttpHandler : HttpMessageHandler

@@ -420,7 +420,29 @@ public class OpenAiCompatClientTests : IDisposable
         Assert.Equal("gpt-4o-turbo", client.Model);
     }
 
-    // --- Test 10: BuildToolResultsMessages returns one message per result ---
+    // --- Test 11: Malformed JSON arguments produce ParseError, no throw ---
+    [Fact]
+    public async Task MalformedJsonArgs_ProducesParseError()
+    {
+        // Arrange — arguments with leading-zero number (invalid JSON per System.Text.Json)
+        var toolCallResponse = MakeToolCallsResponse("call_1", "read_file", "{\"end_line\":07}", "tool_calls");
+        var finalResponse = MakeTextResponse("Done", "stop");
+        var handler = new StubHttpHandler(toolCallResponse, finalResponse);
+        var client = new OpenAiCompatClient("http://127.0.0.1:8080/v1", null, "gpt-4o", handler);
+        var store = await ConversationStore.OpenAsync(_dbFile);
+        var convId = await store.CreateConversationAsync("openai", "gpt-4o", "/work");
+
+        var executor = new FakeToolExecutor();
+        var loop = new AgenticLoop(client, executor, store, convId, null);
+
+        // Act — should not throw
+        await loop.RunTurnAsync("Do something", _ => { }, (_, _) => { }, default);
+
+        // Assert: tool was NOT invoked (executor not called), loop continued to final response
+        Assert.Empty(executor.Calls);
+    }
+
+    // --- Test 12: BuildToolResultsMessages returns one message per result ---
     [Fact]
     public void BuildToolResultsMessages_ReturnsOnePerResult()
     {

@@ -58,4 +58,5 @@ public sealed record ProviderResponse(
 public sealed record ParsedToolCall(
     string Id,
     string Name,
-    JsonObject Input);
+    JsonObject Input,
+    string? ParseError = null);

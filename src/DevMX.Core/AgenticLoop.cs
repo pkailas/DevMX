@@ -144,7 +144,12 @@ public sealed class AgenticLoop
 
                     // Defense-in-depth: deny execution of tools not in the active profile.
                     string result;
-                    if (!ToolProfiles.IsToolAllowed(call.Name, _toolProfile))
+                    if (call.ParseError != null)
+                    {
+                        // Malformed tool-argument JSON: feed error back to model for retry.
+                        result = $"[error] tool arguments were not valid JSON: {call.ParseError}. Re-send the tool call with corrected, strictly valid JSON.";
+                    }
+                    else if (!ToolProfiles.IsToolAllowed(call.Name, _toolProfile))
                     {
                         result = ToolProfiles.DenyMessage(call.Name);
                     }
