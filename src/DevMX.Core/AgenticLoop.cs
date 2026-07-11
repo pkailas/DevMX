@@ -78,17 +78,50 @@ public sealed class AgenticLoop
         var history = new List<JsonNode>(messages.Count);
         foreach (var msg in messages)
         {
-            var parsed = JsonNode.Parse(msg.ContentJson);
-            JsonArray content = parsed switch
+            // content_json has gone through several shapes over the project's life:
+            //   1. a bare content array: [{type:text,...}]
+            //   2. a full message object: {role, content:"string"|[...], tool_calls?:[...]}
+            //   3. anything else (defensive)
+            // Normalize ALL of them to {role, content:[{type:text,text}]} and never throw over one row.
+            // Orphaned tool_calls are dropped: their results were persisted as text rows already, and
+            // resending unbalanced tool_calls would make the API reject the whole resumed history.
+            JsonNode? parsed;
+            try { parsed = JsonNode.Parse(msg.ContentJson); }
+            catch { continue; }
+            if (parsed == null)
+                continue;
+
+            string role = msg.Role;
+            JsonArray content;
+
+            switch (parsed)
             {
-                JsonArray arr => arr,
-                JsonObject obj when obj["content"] is JsonArray contentArr => contentArr,
-                _ => throw new InvalidOperationException($"Invalid content_json in message {msg.Id}: {msg.ContentJson}")
-            };
+                case JsonArray arr:
+                    content = arr;
+                    break;
+                case JsonObject obj:
+                    var objRole = obj["role"]?.GetValue<string>();
+                    if (objRole == "assistant") role = "assistant";
+                    else if (objRole is "user" or "tool") role = "user";
+
+                    if (obj["content"] is JsonArray contentArr)
+                        content = contentArr;
+                    else if (obj["content"] is JsonValue cv && cv.TryGetValue<string>(out var s) && !string.IsNullOrEmpty(s))
+                        content = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = s });
+                    else
+                        continue; // null/empty content and (dropped) tool_calls only - nothing to replay
+                    break;
+                default:
+                    continue;
+            }
+
+            if (content.Count == 0)
+                continue;
+
             history.Add(new JsonObject
             {
-                ["role"] = msg.Role,
-                ["content"] = content
+                ["role"] = role,
+                ["content"] = content.DeepClone()
             });
         }
         return history;
