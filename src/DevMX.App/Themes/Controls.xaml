@@ -1,6 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+  <BooleanToVisibilityConverter x:Key="BoolVis"/>
+
   <!-- ===== FONTS ===== -->
   <FontFamily x:Key="MonospaceFontFamily">Cascadia Mono, Consolas, monospace</FontFamily>
 

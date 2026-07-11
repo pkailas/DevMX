@@ -114,8 +114,10 @@ public sealed class OpenAiCompatClient : IChatProvider
 
         var finishReason = choice["finish_reason"]?.GetValue<string>() ?? "stop";
 
-        // Build the assistant message verbatim (what goes over the wire).
+        // Build the assistant message verbatim (what goes over the wire) - minus reasoning_content:
+        // reasoning models (DeepSeek) return it, but reject requests that echo it back in history.
         var assistantMessage = CloneNode(message);
+        assistantMessage.AsObject().Remove("reasoning_content");
 
         // Parse text blocks.
         var textBlocks = new List<string>();
