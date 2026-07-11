@@ -13,6 +13,7 @@ public partial class ChatViewModel : ObservableObject
     private Action<string, string>? _openDiffTab;
     private Func<string, Task>? _openFile;
     private Action<string, string, string>? _onTaskToolResult;
+    private SlashCommandHandler? _slashCommandHandler;
 
     /// <summary>Set the callback for notifying the task monitor about task-related tool results.</summary>
     internal void SetTaskToolResultCallback(Action<string, string, string> callback)
@@ -76,6 +77,12 @@ public partial class ChatViewModel : ObservableObject
     internal void SetOpenFileCallback(Func<string, Task> callback)
     {
         _openFile = callback;
+    }
+
+    /// <summary>Set the slash command handler for intercepting "/" commands.</summary>
+    internal void SetSlashCommandHandler(SlashCommandHandler handler)
+    {
+        _slashCommandHandler = handler;
     }
 
     /// <summary>Extracts a file path from tool args JSON, if the tool is file-related.</summary>
@@ -214,6 +221,31 @@ public partial class ChatViewModel : ObservableObject
         var text = InputText.Trim();
         if (string.IsNullOrWhiteSpace(text) || IsBusy || !IsInitialized || IsSendDisabled)
             return;
+
+        // Intercept slash commands before sending to the model
+        if (_slashCommandHandler != null && text.StartsWith("/"))
+        {
+            _dispatch(() =>
+            {
+                InputText = string.Empty;
+                IsBusy = true;
+                SendCommand.NotifyCanExecuteChanged();
+            });
+
+            try
+            {
+                _slashCommandHandler.ExecuteCommand(text);
+            }
+            finally
+            {
+                _dispatch(() =>
+                {
+                    IsBusy = false;
+                    SendCommand.NotifyCanExecuteChanged();
+                });
+            }
+            return;
+        }
 
         _dispatch(() =>
         {

@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -31,6 +32,40 @@ public partial class MainWindow : Window
 
         ((INotifyPropertyChanged)vm).PropertyChanged += OnViewModelPropertyChanged;
         UpdateRailVisibility();
+
+        // Wire up the folder picker for slash command /dir -b
+        // The PickFolder callback is set to null in MainViewModel; override it here.
+        var slashHandlerField = typeof(ChatViewModel).GetField("_slashCommandHandler",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var handler = slashHandlerField.GetValue(vm.Chat) as SlashCommandHandler;
+        if (handler != null)
+        {
+            var callbacksField = typeof(SlashCommandHandler).GetField("_callbacks",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var callbacks = callbacksField.GetValue(handler) as SlashCommandCallbacks;
+            if (callbacks != null)
+            {
+                callbacks.PickFolder = (initialDir) =>
+                {
+                    try
+                    {
+                        var dialog = new Microsoft.Win32.OpenFolderDialog
+                        {
+                            InitialDirectory = Directory.Exists(initialDir) ? initialDir : Environment.GetFolderPath(Environment.SpecialFolder.MyComputer)
+                        };
+                        if (dialog.ShowDialog(this) == true)
+                        {
+                            return dialog.FolderName;
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore dialog errors
+                    }
+                    return null;
+                };
+            }
+        }
 
         // Kick off async initialization (fire-and-forget with status updates)
         _ = vm.InitializeAsync();

@@ -86,6 +86,72 @@ public partial class MainViewModel : ObservableObject
             }
         });
 
+        // Wire slash command handler
+        var slashCallbacks = new SlashCommandCallbacks
+        {
+            GetWorkDir = () => _settings.WorkDir,
+            SetWorkDir = (path) => { _settings.WorkDir = path; _settings.Save(); },
+            PickFolder = (initialDir) => null, // Will be overridden by MainWindow
+            RequestReconnect = async () => await ApplyAndReconnectAsync(),
+            CreateNewConversation = async () =>
+            {
+                long newId = await _session.CreateNewConversationAsync();
+                _dispatch(() =>
+                {
+                    var item = new ConversationItemViewModel(newId, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}", DateTime.UtcNow);
+                    Sidebar.Conversations.Insert(0, item);
+                    var fullList = typeof(SidebarViewModel).GetField("_fullList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(Sidebar) as System.Collections.ObjectModel.ObservableCollection<ConversationItemViewModel>;
+                    fullList?.Insert(0, item);
+                    Sidebar.SelectedConversation = item;
+                    Chat.ClearEntries();
+                    // Mark not titled so auto-title can work
+                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                        ;
+                    isTitledField.SetValue(Sidebar, false);
+                    var clearEvent = typeof(SidebarViewModel).GetEvent("OnClearProviderMismatch")!;
+                    var raiseMethod = clearEvent.GetRaiseMethod()!;
+                    raiseMethod.Invoke(Sidebar, null!);
+                });
+                return newId;
+            },
+            UpdateTitle = async (title) =>
+            {
+                await _session.UpdateTitleAsync(title);
+                _dispatch(() =>
+                {
+                    if (Sidebar.SelectedConversation != null)
+                        Sidebar.SelectedConversation.Title = title;
+                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                        ;
+                    isTitledField.SetValue(Sidebar, true);
+                });
+            },
+            OpenConversation = async (id) =>
+            {
+                // Find the conversation item and trigger the sidebar switch flow
+                var item = Sidebar.Conversations.FirstOrDefault(c => c.Id == id);
+                if (item == null)
+                {
+                    throw new InvalidOperationException($"Conversation #{id} not found");
+                }
+                await Sidebar.SelectConversationAsync(item);
+            },
+            SetSearchText = (term) => { Sidebar.SearchText = term; },
+            ExpandSidebar = () => { IsSidebarExpanded = true; },
+            SetTheme = (theme) => { Settings.SetThemeCommand.Execute(theme); },
+            SetToolProfile = (profile) => { Settings.SetToolProfileCommand.Execute(profile); },
+            SetPollThrottle = (value) => { _settings.PollThrottleSeconds = value; _settings.Save(); },
+            AddInfoEntry = (text) =>
+            {
+                _dispatch(() => Chat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, text)));
+            },
+            ClearInputText = () =>
+            {
+                _dispatch(() => Chat.InputText = string.Empty);
+            }
+        };
+        chatVm.SetSlashCommandHandler(new SlashCommandHandler(slashCallbacks));
+
         // Wire sidebar events
         Sidebar.OnProviderMismatch += (convId, providerName) =>
         {
@@ -135,7 +201,7 @@ public partial class MainViewModel : ObservableObject
             _dispatch(() =>
             {
                 StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
-                WindowTitle = $"DevMX — {_settings.WorkDir}";
+                WindowTitle = $"DevMX ï¿½ {_settings.WorkDir}";
                 Chat.SetInitialized(true);
                 IsBusy = false;
             });
@@ -307,6 +373,66 @@ public partial class MainViewModel : ObservableObject
             HandleTaskToolResult(toolName, argJson, resultText);
         });
 
+        // Re-wire slash command handler with updated Sidebar reference
+        var slashCallbacks2 = new SlashCommandCallbacks
+        {
+            GetWorkDir = () => _settings.WorkDir,
+            SetWorkDir = (path) => { _settings.WorkDir = path; _settings.Save(); },
+            PickFolder = (initialDir) => null,
+            RequestReconnect = async () => await ApplyAndReconnectAsync(),
+            CreateNewConversation = async () =>
+            {
+                long newId = await _session.CreateNewConversationAsync();
+                _dispatch(() =>
+                {
+                    var item = new ConversationItemViewModel(newId, $"Session {DateTime.Now:yyyy-MM-dd HH:mm}", DateTime.UtcNow);
+                    newSidebar.Conversations.Insert(0, item);
+                    var fullList = typeof(SidebarViewModel).GetField("_fullList", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(newSidebar) as System.Collections.ObjectModel.ObservableCollection<ConversationItemViewModel>;
+                    fullList?.Insert(0, item);
+                    newSidebar.SelectedConversation = item;
+                    newChat.ClearEntries();
+                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                    isTitledField.SetValue(newSidebar, false);
+                    var clearEvent = typeof(SidebarViewModel).GetEvent("OnClearProviderMismatch")!;
+                    var raiseMethod = clearEvent.GetRaiseMethod()!;
+                    raiseMethod.Invoke(newSidebar, null!);
+                });
+                return newId;
+            },
+            UpdateTitle = async (title) =>
+            {
+                await _session.UpdateTitleAsync(title);
+                _dispatch(() =>
+                {
+                    if (newSidebar.SelectedConversation != null)
+                        newSidebar.SelectedConversation.Title = title;
+                    var isTitledField = typeof(SidebarViewModel).GetField("_isTitled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                    isTitledField.SetValue(newSidebar, true);
+                });
+            },
+            OpenConversation = async (id) =>
+            {
+                var item = newSidebar.Conversations.FirstOrDefault(c => c.Id == id);
+                if (item == null)
+                    throw new InvalidOperationException($"Conversation #{id} not found");
+                await newSidebar.SelectConversationAsync(item);
+            },
+            SetSearchText = (term) => { newSidebar.SearchText = term; },
+            ExpandSidebar = () => { IsSidebarExpanded = true; },
+            SetTheme = (theme) => { Settings.SetThemeCommand.Execute(theme); },
+            SetToolProfile = (profile) => { Settings.SetToolProfileCommand.Execute(profile); },
+            SetPollThrottle = (value) => { _settings.PollThrottleSeconds = value; _settings.Save(); },
+            AddInfoEntry = (text) =>
+            {
+                _dispatch(() => newChat.Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, text)));
+            },
+            ClearInputText = () =>
+            {
+                _dispatch(() => newChat.InputText = string.Empty);
+            }
+        };
+        newChat.SetSlashCommandHandler(new SlashCommandHandler(slashCallbacks2));
+
         // Replace ViewModel references
         Chat = newChat;
         Sidebar = newSidebar;
@@ -317,7 +443,7 @@ public partial class MainViewModel : ObservableObject
         _dispatch(() =>
         {
             StatusText = $"Connected: {_session.ToolCount} tools | {_session.Model} | tools: {_session.EffectiveToolProfile}";
-                WindowTitle = $"DevMX — {_settings.WorkDir}";
+                WindowTitle = $"DevMX ï¿½ {_settings.WorkDir}";
             Chat.SetInitialized(true);
             IsBusy = false;
         });
