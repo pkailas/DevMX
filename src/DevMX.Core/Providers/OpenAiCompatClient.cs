@@ -245,7 +245,10 @@ public sealed class OpenAiCompatClient : IChatProvider
         var body = new JsonObject
         {
             ["model"] = _model,
-            ["max_tokens"] = 4096,
+            // 8192: tool calls carry whole delegation briefs in their arguments, and
+            // reasoning models spend budget before emitting them - 4096 got responses
+            // cut off mid-plan (finish_reason=length, announced action but no call).
+            ["max_tokens"] = 8192,
             ["messages"] = messages
         };
 

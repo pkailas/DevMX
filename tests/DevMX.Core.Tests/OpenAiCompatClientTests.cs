@@ -178,7 +178,7 @@ public class OpenAiCompatClientTests : IDisposable
         var bodyText = await req.Content!.ReadAsStringAsync();
         var body = JsonNode.Parse(bodyText)!.AsObject();
         Assert.Equal("gpt-4o", body["model"]!.GetValue<string>());
-        Assert.Equal(4096, body["max_tokens"]!.GetValue<int>());
+        Assert.Equal(8192, body["max_tokens"]!.GetValue<int>());
 
         var msgs = body["messages"]!.AsArray();
         Assert.Equal(2, msgs.Count);

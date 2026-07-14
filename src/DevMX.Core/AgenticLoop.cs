@@ -173,6 +173,15 @@ public sealed class AgenticLoop
             // If no tool calls, we are done.
             if (response.ToolCalls.Count == 0)
             {
+                // Truncated responses (finish_reason=length) often lost a planned tool
+                // call - never swallow that silently, the user just sees a dead stop.
+                if (response.StopReason is "length" or "max_tokens")
+                {
+                    onAssistantText(
+                        "\n\n[warning] response was cut off by the output-token limit " +
+                        $"(finish_reason={response.StopReason}) - a planned tool call may have been lost. " +
+                        "Send \"continue\" to let the model pick up where it stopped.");
+                }
                 break;
             }
 

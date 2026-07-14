@@ -103,12 +103,16 @@ public sealed class AppSession : IAsyncDisposable
     /// </summary>
     private static string BuildSystemPrompt(string workDir, string effectiveProfile)
     {
+        // Anti-stall guard: some models (DeepSeek in particular) end their turn after
+        // ANNOUNCING an action ("Let me delegate it now.") without emitting the call.
+        const string actNow = " IMPORTANT: when you decide to use a tool, emit the tool call in the SAME response — never end your turn after only announcing what you will do.";
+
         if (effectiveProfile == DevMX.Core.ToolProfiles.Restricted)
         {
-            return $"You are DevMX, a developer assistant. You have read-only and delegation tools only. For ANY file modification, write a precise brief and delegate via devmind_task_start; review with diff_file and run_build. Working directory: {workDir}. Be concise and precise.";
+            return $"You are DevMX, a developer assistant. You have read-only and delegation tools only. For ANY file modification, write a precise brief and delegate via devmind_task_start; review with diff_file and run_build. Working directory: {workDir}. Be concise and precise.{actNow}";
         }
 
-        return $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.";
+        return $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.{actNow}";
     }
 
     /// <summary>
