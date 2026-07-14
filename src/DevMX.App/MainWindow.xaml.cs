@@ -331,17 +331,35 @@ public partial class MainWindow : Window
 
     private int _clipboardImageCounter;
 
-    /// <summary>Grab the clipboard bitmap, encode it as PNG, and attach it.</summary>
+    /// <summary>Grab the clipboard image, encode it as PNG, and attach it.</summary>
     private void AttachClipboardImage()
     {
         try
         {
+            // Prefer a raw PNG stream (Snagit, browsers, most capture tools set one):
+            // Clipboard.GetImage() misreads 32bpp DIB alpha and yields fully
+            // transparent (blank) images for those sources.
+            var dataObj = Clipboard.GetDataObject();
+            foreach (var format in new[] { "PNG", "image/png" })
+            {
+                if (dataObj != null && dataObj.GetDataPresent(format)
+                    && dataObj.GetData(format) is MemoryStream pngStream)
+                {
+                    _clipboardImageCounter++;
+                    Vm.Chat.AddAttachment(AttachmentViewModel.ForImage(
+                        $"pasted-image-{_clipboardImageCounter}.png", "image/png",
+                        Convert.ToBase64String(pngStream.ToArray())));
+                    return;
+                }
+            }
+
             var image = Clipboard.GetImage();
             if (image == null)
             {
                 Vm.Chat.ReportAttachmentIssue("paste failed: no readable image on the clipboard");
                 return;
             }
+            image = RepairTransparentAlpha(image);
             _clipboardImageCounter++;
             Vm.Chat.AddAttachment(AttachmentViewModel.ForImage(
                 $"pasted-image-{_clipboardImageCounter}.png", "image/png", EncodePngBase64(image)));
@@ -350,6 +368,30 @@ public partial class MainWindow : Window
         {
             Vm.Chat.ReportAttachmentIssue($"paste failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// DIBs from capture tools often carry an all-zero alpha channel that WPF interprets
+    /// as fully transparent; the RGB data is intact, so force alpha opaque in that case.
+    /// </summary>
+    private static System.Windows.Media.Imaging.BitmapSource RepairTransparentAlpha(
+        System.Windows.Media.Imaging.BitmapSource src)
+    {
+        if (src.Format != System.Windows.Media.PixelFormats.Bgra32)
+            return src;
+        int stride = src.PixelWidth * 4;
+        var pixels = new byte[(long)stride * src.PixelHeight];
+        src.CopyPixels(pixels, stride, 0);
+        for (int i = 3; i < pixels.Length; i += 4)
+        {
+            if (pixels[i] != 0)
+                return src; // real alpha present - leave untouched
+        }
+        for (int i = 3; i < pixels.Length; i += 4)
+            pixels[i] = 255;
+        return System.Windows.Media.Imaging.BitmapSource.Create(
+            src.PixelWidth, src.PixelHeight, src.DpiX, src.DpiY,
+            System.Windows.Media.PixelFormats.Bgra32, null, pixels, stride);
     }
 
     /// <summary>
