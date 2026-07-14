@@ -16,6 +16,8 @@ public partial class SettingsViewModel : ObservableObject
     // Original values loaded at construction — used for merge-on-apply dirtiness tracking.
     private string _originalEndpoint;
     private string _originalModel;
+    private string _originalVisionEndpoint;
+    private string _originalVisionModel;
     private string _originalProvider;
     private string _originalWorkDir;
     private string _originalTheme;
@@ -28,6 +30,12 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string model;
+
+    [ObservableProperty]
+    private string visionEndpoint;
+
+    [ObservableProperty]
+    private string visionModel;
 
     [ObservableProperty]
     private string provider;
@@ -98,6 +106,8 @@ public partial class SettingsViewModel : ObservableObject
         // Record original values for dirtiness tracking
         _originalEndpoint = settings.Endpoint;
         _originalModel = settings.Model;
+        _originalVisionEndpoint = settings.VisionEndpoint;
+        _originalVisionModel = settings.VisionModel;
         _originalProvider = settings.Provider;
         _originalWorkDir = settings.WorkDir;
         _originalTheme = settings.Theme;
@@ -108,6 +118,8 @@ public partial class SettingsViewModel : ObservableObject
         // Set VM fields (triggers OnPropertyChanged but persist handlers no-op until _initialized)
         Endpoint = settings.Endpoint;
         Model = settings.Model;
+        VisionEndpoint = settings.VisionEndpoint;
+        VisionModel = settings.VisionModel;
         Provider = settings.Provider;
         WorkDir = settings.WorkDir;
         Theme = settings.Theme;
@@ -214,6 +226,8 @@ public partial class SettingsViewModel : ObservableObject
         // Otherwise keep the fresh-disk value.
         fresh.Endpoint = (Endpoint != _originalEndpoint) ? Endpoint : fresh.Endpoint;
         fresh.Model = (Model != _originalModel) ? Model : fresh.Model;
+        fresh.VisionEndpoint = (VisionEndpoint != _originalVisionEndpoint) ? VisionEndpoint : fresh.VisionEndpoint;
+        fresh.VisionModel = (VisionModel != _originalVisionModel) ? VisionModel : fresh.VisionModel;
         fresh.Provider = (Provider != _originalProvider) ? Provider : fresh.Provider;
         fresh.WorkDir = (WorkDir != _originalWorkDir) ? WorkDir : fresh.WorkDir;
         fresh.Theme = (Theme != _originalTheme) ? Theme : fresh.Theme;
@@ -236,6 +250,8 @@ public partial class SettingsViewModel : ObservableObject
         // Refresh VM fields + originals from the merged result
         Endpoint = fresh.Endpoint;
         Model = fresh.Model;
+        VisionEndpoint = fresh.VisionEndpoint;
+        VisionModel = fresh.VisionModel;
         Provider = fresh.Provider;
         WorkDir = fresh.WorkDir;
         Theme = fresh.Theme;
@@ -246,6 +262,8 @@ public partial class SettingsViewModel : ObservableObject
         // Update originals to match the merged result (so subsequent Apply is idempotent)
         _originalEndpoint = fresh.Endpoint;
         _originalModel = fresh.Model;
+        _originalVisionEndpoint = fresh.VisionEndpoint;
+        _originalVisionModel = fresh.VisionModel;
         _originalProvider = fresh.Provider;
         _originalWorkDir = fresh.WorkDir;
         _originalTheme = fresh.Theme;

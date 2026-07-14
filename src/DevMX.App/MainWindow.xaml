@@ -477,6 +477,16 @@
                 <TextBox Text="{Binding Settings.Provider, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
               </StackPanel>
 
+              <!-- Vision sidecar -->
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Vision sidecar endpoint (OCRs pasted images; empty = off)" Foreground="{DynamicResource DimBrush}" TextWrapping="Wrap"/>
+                <TextBox Text="{Binding Settings.VisionEndpoint, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
+              </StackPanel>
+              <StackPanel Margin="0,4">
+                <TextBlock Text="Vision sidecar model" Foreground="{DynamicResource DimBrush}"/>
+                <TextBox Text="{Binding Settings.VisionModel, UpdateSourceTrigger=PropertyChanged}" Padding="4,2"/>
+              </StackPanel>
+
               <!-- Workdir -->
               <StackPanel Margin="0,4">
                 <TextBlock Text="Workdir" Foreground="{DynamicResource DimBrush}"/>

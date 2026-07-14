@@ -27,6 +27,11 @@ public sealed class AppSession : IAsyncDisposable
     private ConversationStore? _store;
     private IChatProvider? _provider;
     private AgenticLoop? _loop;
+    private VisionSidecarClient? _visionSidecar;
+
+    private const string VisionOcrPrompt =
+        "Transcribe all text visible in this image exactly, preserving structure (headings, tables, code, error messages). " +
+        "Then in 1-3 sentences describe any notable visual elements (UI controls, dialogs, charts, highlights) a developer would care about.";
 
     public bool IsInitialized { get; private set; }
     public string? Model { get; private set; }
@@ -266,6 +271,27 @@ public sealed class AppSession : IAsyncDisposable
                     "pass these paths to tools (e.g. attach_image, read_file, or a devmind_task_start brief) when the work needs them:\n" +
                     string.Join("\n", stagedPaths.Select(p => "- " + p)) + "\n]";
             }
+
+            // Sidecar-OCR image attachments through the local vision endpoint so a
+            // text-only chat model can read them.
+            if (!string.IsNullOrWhiteSpace(_settings.VisionEndpoint))
+            {
+                foreach (var att in attachments)
+                {
+                    if (!att.IsImage || att.Base64Data == null)
+                        continue;
+                    try
+                    {
+                        _visionSidecar ??= new VisionSidecarClient(_settings.VisionEndpoint, _settings.VisionModel);
+                        var note = await _visionSidecar.DescribeImageAsync(att.MediaType, att.Base64Data, VisionOcrPrompt, ct);
+                        userText += $"\n\n[image {att.FileName} — transcription by vision sidecar ({_settings.VisionModel}):\n{note}\n]";
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        userText += $"\n\n[image {att.FileName}: vision sidecar OCR failed ({ex.Message}) — the staged file path above is still available]";
+                    }
+                }
+            }
         }
 
         await _loop.RunTurnAsync(userText, onAssistantText, onToolCall, ct, onToolResult, attachments);
@@ -484,5 +510,6 @@ public sealed class AppSession : IAsyncDisposable
         {
             try { d.Dispose(); } catch { /* best-effort */ }
         }
+        _visionSidecar?.Dispose();
     }
 }

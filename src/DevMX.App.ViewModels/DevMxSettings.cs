@@ -10,11 +10,18 @@ public sealed record DevMxSettings
     public const string DefaultServerExe = @"C:\Users\pkailas\source\repos\DevMind\dist\mcp\DevMind.McpServer.exe";
     public const string DefaultWorkDir = @"C:\Users\pkailas\source\repos\DevMX";
     public const string DefaultEndpoint = "http://127.0.0.1:8080/v1";
+    public const string DefaultVisionEndpoint = "http://127.0.0.1:8084/v1";
+    public const string DefaultVisionModel = "Qwen3-VL-32B-Instruct-AWQ";
 
     public string ServerExe { get; set; } = DefaultServerExe;
     public string WorkDir { get; set; } = DefaultWorkDir;
     public string Endpoint { get; set; } = DefaultEndpoint;
     public string Model { get; set; } = string.Empty;
+
+    /// <summary>Vision sidecar endpoint used to OCR image attachments before sending
+    /// (same server DevMind's /library add uses). Empty disables the sidecar.</summary>
+    public string VisionEndpoint { get; set; } = DefaultVisionEndpoint;
+    public string VisionModel { get; set; } = DefaultVisionModel;
     public string Provider { get; set; } = "openai";
     public string Theme { get; set; } = "dark";
     public string ToolProfile { get; set; } = "auto";
