@@ -182,6 +182,15 @@ public sealed class AgenticLoop
                         $"(finish_reason={response.StopReason}) - a planned tool call may have been lost. " +
                         "Send \"continue\" to let the model pick up where it stopped.");
                 }
+                else if (!response.TextBlocks.Any(t => !string.IsNullOrWhiteSpace(t)))
+                {
+                    // Empty response with a normal stop reason: typical of an overlong
+                    // conversation degrading the model. Surface it instead of dead air.
+                    onAssistantText(
+                        $"[warning] the model returned an empty response (finish_reason={response.StopReason}). " +
+                        "This usually means the conversation has grown too long for the model to handle reliably - " +
+                        "consider starting a new conversation.");
+                }
                 break;
             }
 
