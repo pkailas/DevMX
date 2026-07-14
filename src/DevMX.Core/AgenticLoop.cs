@@ -423,42 +423,40 @@ public sealed class AgenticLoop
         return true;
     }
 
-    /// <summary>Flatten history to readable text for the digest prompt (text blocks +
-    /// tool-call names; individual messages truncated; total capped).</summary>
+    /// <summary>Flatten history to readable text for digest/handoff prompts (text blocks +
+    /// tool-call names; individual messages truncated). When over the cap, the head and
+    /// tail are kept and the middle omitted - the newest turns carry the outstanding work.</summary>
     private static string RenderForDigest(List<JsonNode> history, int maxChars)
     {
-        var sb = new System.Text.StringBuilder();
+        var entries = new List<string>();
         foreach (var msg in history)
         {
-            if (sb.Length >= maxChars)
-                break;
             if (msg is not JsonObject obj)
                 continue;
             string role = obj["role"]?.GetValue<string>() ?? "?";
 
             if (obj["content"] is JsonValue cv && cv.TryGetValue<string>(out var plain))
             {
-                AppendEntry(sb, role, plain);
-                continue;
+                AddEntry(entries, role, plain);
             }
-            if (obj["content"] is not JsonArray blocks)
-                continue;
-            foreach (var block in blocks)
+            else if (obj["content"] is JsonArray blocks)
             {
-                if (block is not JsonObject b)
-                    continue;
-                switch (b["type"]?.GetValue<string>())
+                foreach (var block in blocks)
                 {
-                    case "text":
-                        AppendEntry(sb, role, b["text"]?.GetValue<string>() ?? "");
-                        break;
-                    case "tool_use":
-                        AppendEntry(sb, role, $"(called tool {b["name"]?.GetValue<string>()})");
-                        break;
-                    case "tool_result":
-                        var resultText = b["content"]?.ToJsonString() ?? "";
-                        AppendEntry(sb, "tool", resultText);
-                        break;
+                    if (block is not JsonObject b)
+                        continue;
+                    switch (b["type"]?.GetValue<string>())
+                    {
+                        case "text":
+                            AddEntry(entries, role, b["text"]?.GetValue<string>() ?? "");
+                            break;
+                        case "tool_use":
+                            AddEntry(entries, role, $"(called tool {b["name"]?.GetValue<string>()})");
+                            break;
+                        case "tool_result":
+                            AddEntry(entries, "tool", b["content"]?.ToJsonString() ?? "");
+                            break;
+                    }
                 }
             }
             // OpenAI-style tool_calls on the message object itself
@@ -468,20 +466,80 @@ public sealed class AgenticLoop
                 {
                     var name = (tc as JsonObject)?["function"]?["name"]?.GetValue<string>();
                     if (name != null)
-                        AppendEntry(sb, role, $"(called tool {name})");
+                        AddEntry(entries, role, $"(called tool {name})");
                 }
             }
         }
-        return sb.Length > maxChars ? sb.ToString(0, maxChars) : sb.ToString();
 
-        static void AppendEntry(System.Text.StringBuilder sb, string role, string text)
+        long total = 0;
+        foreach (var e in entries) total += e.Length;
+        var sb = new System.Text.StringBuilder();
+        if (total <= maxChars)
+        {
+            foreach (var e in entries) sb.Append(e);
+            return sb.ToString();
+        }
+
+        // Over budget: ~30% head, rest tail, middle omitted.
+        long headBudget = maxChars * 3 / 10;
+        int i = 0;
+        for (; i < entries.Count && sb.Length + entries[i].Length <= headBudget; i++)
+            sb.Append(entries[i]);
+
+        long tailBudget = maxChars - sb.Length - 64;
+        long tailLen = 0;
+        int j = entries.Count;
+        while (j - 1 > i && tailLen + entries[j - 1].Length <= tailBudget)
+        {
+            j--;
+            tailLen += entries[j].Length;
+        }
+        sb.AppendLine("[... middle of the conversation omitted for length ...]").AppendLine();
+        for (int k = j; k < entries.Count; k++)
+            sb.Append(entries[k]);
+        return sb.ToString();
+
+        static void AddEntry(List<string> entries, string role, string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return;
             if (text.Length > 1500)
                 text = text[..1500] + " …[truncated]";
-            sb.Append(role).Append(": ").AppendLine(text).AppendLine();
+            entries.Add($"{role}: {text}\n\n");
         }
+    }
+
+    /// <summary>
+    /// Generate a structured handoff document for the whole conversation via the LLM
+    /// (no tools) - used by /handoff so a fresh conversation can pick up the work.
+    /// </summary>
+    public async Task<string> GenerateHandoffAsync(CancellationToken ct = default)
+    {
+        string rendered = RenderForDigest(_history, maxChars: 400_000);
+        if (rendered.Length == 0)
+            throw new InvalidOperationException("conversation is empty - nothing to hand off");
+
+        string prompt =
+            "You are writing a handoff document so a fresh AI assistant (with code and tool access, " +
+            "but NO memory of this conversation) can continue the work seamlessly. From the conversation " +
+            "below, write a markdown document with exactly these sections:\n" +
+            "# Project handoff\n" +
+            "## What this project is\n" +
+            "## Key decisions made\n" +
+            "## Work completed\n" +
+            "## User preferences and corrections to respect\n" +
+            "## Current outstanding tasks (capture EVERY stated requirement in detail)\n" +
+            "## Open questions / loose ends\n" +
+            "Be faithful to the conversation - do not invent details; mark anything ambiguous as '(unclear)'. " +
+            "Output ONLY the markdown document.\n\n" + rendered;
+
+        var resp = await _llm.CreateMessageAsync(
+            new List<JsonNode> { _llm.BuildUserMessage(prompt) },
+            Array.Empty<ToolDefinition>(), null, ct);
+        string doc = string.Join("\n", resp.TextBlocks).Trim();
+        if (doc.Length == 0)
+            throw new InvalidOperationException("the model returned an empty handoff document");
+        return doc;
     }
 
     /// <summary>Extract the content JSON from a provider message node for persistence.</summary>

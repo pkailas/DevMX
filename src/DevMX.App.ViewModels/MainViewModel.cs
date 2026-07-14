@@ -172,7 +172,8 @@ public partial class MainViewModel : ObservableObject
             ClearInputText = () =>
             {
                 _dispatch(() => Chat.InputText = string.Empty);
-            }
+            },
+            CreateHandoff = async () => await _session.CreateHandoffAsync()
         };
         chatVm.SetSlashCommandHandler(new SlashCommandHandler(slashCallbacks));
 
@@ -447,7 +448,8 @@ public partial class MainViewModel : ObservableObject
             ClearInputText = () =>
             {
                 _dispatch(() => newChat.InputText = string.Empty);
-            }
+            },
+            CreateHandoff = async () => await _session.CreateHandoffAsync()
         };
         newChat.SetSlashCommandHandler(new SlashCommandHandler(slashCallbacks2));
 
@@ -731,6 +733,7 @@ public partial class MainViewModel : ObservableObject
   /search <term>       Search conversations
   /theme dark|light    Switch theme
   /poll <n>            Set poll throttle (0-60 seconds)
-  /profile auto|full|restricted  Set tool access profile";
+  /profile auto|full|restricted  Set tool access profile
+  /handoff             Write a handoff .md of this conversation for a fresh one";
     }
 }

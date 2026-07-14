@@ -341,6 +341,23 @@ public sealed class AppSession : IAsyncDisposable
     }
 
     /// <summary>
+    /// Generates a handoff document for the current conversation and writes it to
+    /// &lt;workdir&gt;\.devmx\. Returns the workdir-relative path.
+    /// </summary>
+    public async Task<string> CreateHandoffAsync(CancellationToken ct = default)
+    {
+        if (_loop == null)
+            throw new InvalidOperationException("AppSession not initialized.");
+
+        string doc = await _loop.GenerateHandoffAsync(ct);
+        string dir = Path.Combine(_settings.WorkDir, ".devmx");
+        Directory.CreateDirectory(dir);
+        string fileName = $"handoff-conv{ConversationId}-{DateTime.Now:yyyyMMdd-HHmm}.md";
+        File.WriteAllText(Path.Combine(dir, fileName), doc);
+        return Path.Combine(".devmx", fileName);
+    }
+
+    /// <summary>
     /// Fetches file content by calling the MCP read_file tool directly.
     /// Strips any tool-banner prefix lines from the result.
     /// </summary>

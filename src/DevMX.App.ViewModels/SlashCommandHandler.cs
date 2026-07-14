@@ -50,6 +50,9 @@ public sealed class SlashCommandCallbacks
     /// <summary>Clear the chat input text field.</summary>
     public Action ClearInputText;
 
+    /// <summary>Generate a handoff document for the current conversation; returns its workdir-relative path.</summary>
+    public Func<Task<string>> CreateHandoff;
+
     public SlashCommandCallbacks()
     {
         GetWorkDir = () => string.Empty;
@@ -66,6 +69,7 @@ public sealed class SlashCommandCallbacks
         SetPollThrottle = _ => { };
         AddInfoEntry = _ => { };
         ClearInputText = () => { };
+        CreateHandoff = () => Task.FromException<string>(new InvalidOperationException("handoff is not wired up"));
     }
 }
 
@@ -118,6 +122,7 @@ public sealed class SlashCommandHandler
             "theme" => HandleTheme(args),
             "poll" => HandlePoll(args),
             "profile" => HandleProfile(args),
+            "handoff" => HandleHandoff(),
             _ => HandleUnknown(text)
         };
     }
@@ -136,7 +141,8 @@ public sealed class SlashCommandHandler
             "  /search <term>     Search conversations (expands sidebar)",
             "  /theme dark|light  Switch theme",
             "  /poll <n>          Set poll throttle (0-60, applies on reconnect)",
-            "  /profile auto|full|restricted  Set tool profile (applies on reconnect)"
+            "  /profile auto|full|restricted  Set tool profile (applies on reconnect)",
+            "  /handoff           Write a handoff .md of this conversation for a fresh one"
         };
         _callbacks.AddInfoEntry(string.Join("\n", lines));
         return true;
@@ -312,6 +318,27 @@ public sealed class SlashCommandHandler
 
         _callbacks.SetToolProfile(profile);
         _callbacks.AddInfoEntry($"Tool profile set to: {profile} (applies on reconnect).");
+        return true;
+    }
+
+    private bool HandleHandoff()
+    {
+        _callbacks.AddInfoEntry("Generating handoff document from this conversation… (can take a minute on long conversations)");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var relPath = await _callbacks.CreateHandoff();
+                _callbacks.AddInfoEntry(
+                    $"Handoff written to {relPath}\n\n" +
+                    "To pass the baton: start a new conversation (/new) and open with:\n" +
+                    $"  Read {relPath} with read_file — it's the handoff from our previous conversation — then continue the outstanding work described in it.");
+            }
+            catch (Exception ex)
+            {
+                _callbacks.AddInfoEntry($"[error] handoff failed: {ex.Message}");
+            }
+        });
         return true;
     }
 
