@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
 
@@ -76,6 +77,34 @@ public partial class ChatViewModel : ObservableObject
         _session = session;
         _dispatch = dispatch;
         Entries = new ObservableCollection<ChatEntryViewModel>();
+        Attachments.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasAttachments));
+            SendCommand.NotifyCanExecuteChanged();
+        };
+    }
+
+    /// <summary>Pending attachments to send with the next message.</summary>
+    public ObservableCollection<AttachmentViewModel> Attachments { get; } = new();
+
+    public bool HasAttachments => Attachments.Count > 0;
+
+    /// <summary>Adds a pending attachment (called from paste/drop handlers on the UI thread).</summary>
+    public void AddAttachment(AttachmentViewModel attachment)
+    {
+        Attachments.Add(attachment);
+    }
+
+    /// <summary>Surface a non-fatal attachment problem (unsupported file, too large) in the chat.</summary>
+    public void ReportAttachmentIssue(string message)
+    {
+        _dispatch(() => Entries.Add(new ChatEntryViewModel(ChatEntryKind.Info, $"[info] {message}")));
+    }
+
+    [RelayCommand]
+    private void RemoveAttachment(AttachmentViewModel attachment)
+    {
+        Attachments.Remove(attachment);
     }
 
     internal void SetAutoTitleCallback(Func<string, Task> callback)
@@ -388,14 +417,15 @@ public partial class ChatViewModel : ObservableObject
 
     private bool CanSend()
     {
-        return !IsBusy && IsInitialized && !IsSendDisabled && !string.IsNullOrWhiteSpace(InputText);
+        return !IsBusy && IsInitialized && !IsSendDisabled
+            && (!string.IsNullOrWhiteSpace(InputText) || HasAttachments);
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
         var text = InputText.Trim();
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text) && !HasAttachments)
             return;
         if (IsBusy || !IsInitialized || IsSendDisabled)
         {
@@ -432,10 +462,22 @@ public partial class ChatViewModel : ObservableObject
             return;
         }
 
+        // Snapshot pending attachments for this turn.
+        var attachments = Attachments.Count > 0
+            ? Attachments.Select(a => a.ToChatAttachment()).ToList()
+            : null;
+
+        // Echo attachments in the user bubble so the transcript shows what was sent.
+        string displayText = attachments == null
+            ? text
+            : (string.IsNullOrEmpty(text) ? "" : text + "\n")
+              + $"[attached: {string.Join(", ", attachments.Select(a => a.FileName))}]";
+
         _dispatch(() =>
         {
-            Entries.Add(new ChatEntryViewModel(ChatEntryKind.User, text));
+            Entries.Add(new ChatEntryViewModel(ChatEntryKind.User, displayText));
             InputText = string.Empty;
+            Attachments.Clear();
             IsBusy = true;
             SendCommand.NotifyCanExecuteChanged();
             StopCommand.NotifyCanExecuteChanged();
@@ -533,7 +575,8 @@ public partial class ChatViewModel : ObservableObject
                     // Notify task monitor about task-related tool results
                     _onTaskToolResult?.Invoke(name, argJson, resultText);
                 },
-                ct: _turnCts.Token);
+                ct: _turnCts.Token,
+                attachments: attachments);
 
             // Notify caller of successful turn completion (for auto-title, etc.)
             if (_onTurnComplete != null)

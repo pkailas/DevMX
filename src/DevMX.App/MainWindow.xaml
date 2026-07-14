@@ -798,22 +798,64 @@
 
         <!-- Input row -->
         <Grid Grid.Row="3" Margin="8,4,8,8">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
 
-          <TextBox Grid.Column="0"
+          <!-- Pending attachment chips -->
+          <ItemsControl Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                        ItemsSource="{Binding Chat.Attachments}"
+                        Visibility="{Binding Chat.HasAttachments, Converter={StaticResource BoolVis}}"
+                        Margin="0,0,0,4">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel/>
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border Background="{DynamicResource InputBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                        CornerRadius="3" Padding="6,2" Margin="0,0,4,4">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding DisplayLabel}"
+                               Foreground="{DynamicResource ForegroundBrush}"
+                               VerticalAlignment="Center"/>
+                    <Button Content="×" Padding="4,0" Margin="4,0,0,0"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="{DynamicResource DimBrush}" ToolTip="Remove attachment"
+                            Command="{Binding DataContext.Chat.RemoveAttachmentCommand,
+                                        RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                            CommandParameter="{Binding}"/>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBox Grid.Row="1" Grid.Column="0" x:Name="ChatInputBox"
                    Text="{Binding Chat.InputText, UpdateSourceTrigger=PropertyChanged}"
-                   KeyDown="ChatInput_KeyDown"
+                   PreviewKeyDown="ChatInput_PreviewKeyDown"
                    Padding="8,6"
+                   AcceptsReturn="True"
+                   TextWrapping="Wrap"
+                   MaxHeight="150"
+                   VerticalScrollBarVisibility="Auto"
                    VerticalContentAlignment="Center"
+                   AllowDrop="True"
+                   PreviewDragOver="ChatInput_PreviewDragOver"
+                   PreviewDrop="ChatInput_PreviewDrop"
                    IsEnabled="{Binding Chat.CanSendInput}"/>
 
-          <Button Grid.Column="1" Content="Send"
+          <Button Grid.Row="1" Grid.Column="1" Content="Send"
                   Command="{Binding Chat.SendCommand}"
                   Margin="4,0,0,0" Padding="12,6"
-                  VerticalAlignment="Center">
+                  VerticalAlignment="Bottom">
             <Button.Style>
               <Style TargetType="Button">
                 <Style.Triggers>
@@ -824,10 +866,10 @@
               </Style>
             </Button.Style>
           </Button>
-          <Button Grid.Column="1" Content="Stop"
+          <Button Grid.Row="1" Grid.Column="1" Content="Stop"
                   Command="{Binding Chat.StopCommand}"
                   Margin="4,0,0,0" Padding="12,6"
-                  VerticalAlignment="Center"
+                  VerticalAlignment="Bottom"
                   Background="#F44747" Foreground="White">
             <Button.Style>
               <Style TargetType="Button">

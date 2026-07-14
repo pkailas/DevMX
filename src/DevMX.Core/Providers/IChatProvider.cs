@@ -32,6 +32,12 @@ public interface IChatProvider
     JsonNode BuildUserMessage(string text);
 
     /// <summary>
+    /// Build a user message JsonNode from text plus attachments (images / embedded text files).
+    /// Default falls back to text-only for providers without multimodal support.
+    /// </summary>
+    JsonNode BuildUserMessage(string text, IReadOnlyList<ChatAttachment> attachments) => BuildUserMessage(text);
+
+    /// <summary>
     /// Build tool-result message(s) from tool call results.
     /// Anthropic returns a 1-element list (one user message with all tool_result blocks).
     /// OpenAI returns N elements (one tool message per result).
@@ -53,6 +59,20 @@ public sealed record ProviderResponse(
 
     /// <summary>Text blocks extracted from the response (for callbacks).</summary>
     IReadOnlyList<string> TextBlocks);
+
+/// <summary>
+/// A user attachment carried alongside message text.
+/// Images: MediaType is "image/png" | "image/jpeg" | "image/gif" | "image/webp" and Base64Data is set.
+/// Text files: MediaType is "text/plain" and TextContent holds the file body (embedded as a text block).
+/// </summary>
+public sealed record ChatAttachment(
+    string FileName,
+    string MediaType,
+    string? Base64Data = null,
+    string? TextContent = null)
+{
+    public bool IsImage => MediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>A single parsed tool call from a provider response.</summary>
 public sealed record ParsedToolCall(

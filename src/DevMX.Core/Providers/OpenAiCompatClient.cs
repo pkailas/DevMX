@@ -47,57 +47,25 @@ public sealed class OpenAiCompatClient : IChatProvider
         string? system,
         CancellationToken ct = default)
     {
-        // Build messages array: system first (if present), then history.
-        var messages = new JsonArray();
-        if (system is not null)
+        // First attempt sends any image parts as-is (vision-capable endpoints accept them).
+        var response = await PostChatAsync(BuildRequestMessages(history, system, scrubImages: false), tools, ct);
+        var responseText = await response.Content.ReadAsStringAsync(ct);
+
+        // Text-only endpoints reject the whole request over one image part -
+        // scrub images to text placeholders and retry once.
+        if (!response.IsSuccessStatusCode && responseText.Contains("image_url") && HasImageParts(history))
         {
-            messages.Add(new JsonObject { ["role"] = "system", ["content"] = system });
+            response = await PostChatAsync(BuildRequestMessages(history, system, scrubImages: true), tools, ct);
+            responseText = await response.Content.ReadAsStringAsync(ct);
         }
-        foreach (var msg in history)
-        {
-            messages.Add(CloneNode(msg));
-        }
-
-        var body = new JsonObject
-        {
-            ["model"] = _model,
-            ["max_tokens"] = 4096,
-            ["messages"] = messages
-        };
-
-        if (tools.Count > 0)
-        {
-            body["tools"] = SerializeToolsOpenAi(tools);
-            body["tool_choice"] = "auto";
-        }
-
-        var content = new StringContent(
-            body.ToJsonString(),
-            Encoding.UTF8,
-            "application/json");
-
-        var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
-        {
-            Content = content
-        };
-
-        if (!string.IsNullOrEmpty(_apiKey))
-        {
-            request.Headers.Add("Authorization", "Bearer " + _apiKey);
-        }
-
-        var response = await _http.SendAsync(request, ct);
 
         if (!response.IsSuccessStatusCode)
         {
-            var bodyText = await response.Content.ReadAsStringAsync(ct);
             throw new OpenAiCompatApiException(
-                $"OpenAI-compatible API request failed with status {response.StatusCode}: {bodyText}",
+                $"OpenAI-compatible API request failed with status {response.StatusCode}: {responseText}",
                 response.StatusCode,
-                bodyText);
+                responseText);
         }
-
-        var responseText = await response.Content.ReadAsStringAsync(ct);
         var responseObject = JsonNode.Parse(responseText)
             ?? throw new InvalidOperationException("Empty response from OpenAI-compatible API");
         var responseObj = responseObject.AsObject();
@@ -178,6 +146,43 @@ public sealed class OpenAiCompatClient : IChatProvider
     }
 
     /// <summary>
+    /// Build a user message with attachments (OpenAI multimodal content parts).
+    /// Images are sent as image_url parts; text-only endpoints that reject them are
+    /// handled by the scrub-and-retry fallback in CreateMessageAsync.
+    /// </summary>
+    public JsonNode BuildUserMessage(string text, IReadOnlyList<ChatAttachment> attachments)
+    {
+        var parts = new JsonArray();
+        foreach (var att in attachments)
+        {
+            if (att.IsImage && att.Base64Data is not null)
+            {
+                parts.Add(new JsonObject
+                {
+                    ["type"] = "image_url",
+                    ["image_url"] = new JsonObject
+                    {
+                        ["url"] = $"data:{att.MediaType};base64,{att.Base64Data}"
+                    }
+                });
+            }
+            else if (att.TextContent is not null)
+            {
+                parts.Add(new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = $"Attached file: {att.FileName}\n```\n{att.TextContent}\n```"
+                });
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            parts.Add(new JsonObject { ["type"] = "text", ["text"] = text });
+        }
+        return new JsonObject { ["role"] = "user", ["content"] = parts };
+    }
+
+    /// <summary>
     /// Build tool-result messages (OpenAI: one tool message per result).
     /// </summary>
     public IReadOnlyList<JsonNode> BuildToolResultsMessages(
@@ -213,6 +218,96 @@ public sealed class OpenAiCompatClient : IChatProvider
             });
         }
         return arr;
+    }
+
+    /// <summary>Build the request messages array: system first (if present), then cloned history.</summary>
+    private static JsonArray BuildRequestMessages(IReadOnlyList<JsonNode> history, string? system, bool scrubImages)
+    {
+        var messages = new JsonArray();
+        if (system is not null)
+        {
+            messages.Add(new JsonObject { ["role"] = "system", ["content"] = system });
+        }
+        foreach (var msg in history)
+        {
+            var cloned = CloneNode(msg);
+            if (scrubImages)
+                ReplaceImagePartsWithText(cloned);
+            messages.Add(cloned);
+        }
+        return messages;
+    }
+
+    /// <summary>POST a chat/completions request with the given messages.</summary>
+    private async Task<HttpResponseMessage> PostChatAsync(
+        JsonArray messages, IReadOnlyList<ToolDefinition> tools, CancellationToken ct)
+    {
+        var body = new JsonObject
+        {
+            ["model"] = _model,
+            ["max_tokens"] = 4096,
+            ["messages"] = messages
+        };
+
+        if (tools.Count > 0)
+        {
+            body["tools"] = SerializeToolsOpenAi(tools);
+            body["tool_choice"] = "auto";
+        }
+
+        var content = new StringContent(
+            body.ToJsonString(),
+            Encoding.UTF8,
+            "application/json");
+
+        var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/chat/completions")
+        {
+            Content = content
+        };
+
+        if (!string.IsNullOrEmpty(_apiKey))
+        {
+            request.Headers.Add("Authorization", "Bearer " + _apiKey);
+        }
+
+        return await _http.SendAsync(request, ct);
+    }
+
+    /// <summary>True if any history message carries an image content part.</summary>
+    private static bool HasImageParts(IReadOnlyList<JsonNode> history)
+    {
+        foreach (var msg in history)
+        {
+            if (msg is not JsonObject obj || obj["content"] is not JsonArray parts)
+                continue;
+            foreach (var part in parts)
+            {
+                var type = (part as JsonObject)?["type"]?.GetValue<string>();
+                if (type == "image_url" || type == "image")
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Replace image_url / image content parts in a message with text placeholders.</summary>
+    private static void ReplaceImagePartsWithText(JsonNode msg)
+    {
+        if (msg is not JsonObject obj || obj["content"] is not JsonArray parts)
+            return;
+
+        for (int i = 0; i < parts.Count; i++)
+        {
+            var type = (parts[i] as JsonObject)?["type"]?.GetValue<string>();
+            if (type == "image_url" || type == "image")
+            {
+                parts[i] = new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = "[image attachment omitted — this endpoint rejected image input; a copy is staged on disk, see the staged path list in this message]"
+                };
+            }
+        }
     }
 
     private static JsonNode CloneNode(JsonNode node)

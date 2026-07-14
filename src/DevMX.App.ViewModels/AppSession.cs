@@ -240,7 +240,8 @@ public sealed class AppSession : IAsyncDisposable
         Action<string> onAssistantText,
         Action<string, string> onToolCall,
         CancellationToken ct = default,
-        Action<string, string, string>? onToolResult = null)
+        Action<string, string, string>? onToolResult = null,
+        IReadOnlyList<ChatAttachment>? attachments = null)
     {
         if (!IsInitialized)
             throw new InvalidOperationException("AppSession not initialized. Call InitializeAsync first.");
@@ -252,7 +253,58 @@ public sealed class AppSession : IAsyncDisposable
         if (Model == "(unset)")
             throw new InvalidOperationException("Model is not set. Could not auto-discover a model from the /models endpoint. Please ensure your local LLM server is running.");
 
-        await _loop.RunTurnAsync(userText, onAssistantText, onToolCall, ct, onToolResult);
+        // Stage attachments on disk inside the workdir so the model can hand their paths
+        // to DevMind tools (the delegated agent cannot receive bytes through tool calls,
+        // and DM's sandbox blocks paths outside the working directory).
+        if (attachments is { Count: > 0 })
+        {
+            var stagedPaths = StageAttachments(attachments);
+            if (stagedPaths.Count > 0)
+            {
+                userText +=
+                    "\n\n[attachments staged on disk, paths relative to the working directory — " +
+                    "pass these paths to tools (e.g. attach_image, read_file, or a devmind_task_start brief) when the work needs them:\n" +
+                    string.Join("\n", stagedPaths.Select(p => "- " + p)) + "\n]";
+            }
+        }
+
+        await _loop.RunTurnAsync(userText, onAssistantText, onToolCall, ct, onToolResult, attachments);
+    }
+
+    /// <summary>
+    /// Writes attachments to &lt;workdir&gt;\.devmx\attachments and returns their workdir-relative paths.
+    /// Best-effort: on failure returns whatever was staged so far (the chat message still carries
+    /// the attachment content for the brain itself).
+    /// </summary>
+    private IReadOnlyList<string> StageAttachments(IReadOnlyList<ChatAttachment> attachments)
+    {
+        var relPaths = new List<string>();
+        try
+        {
+            string dir = Path.Combine(_settings.WorkDir, ".devmx", "attachments");
+            Directory.CreateDirectory(dir);
+            string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            int index = 0;
+            foreach (var att in attachments)
+            {
+                index++;
+                string safeName = string.Join("_", att.FileName.Split(Path.GetInvalidFileNameChars()));
+                string fileName = $"{stamp}-{index:00}-{safeName}";
+                string fullPath = Path.Combine(dir, fileName);
+                if (att.Base64Data != null)
+                    File.WriteAllBytes(fullPath, Convert.FromBase64String(att.Base64Data));
+                else if (att.TextContent != null)
+                    File.WriteAllText(fullPath, att.TextContent);
+                else
+                    continue;
+                relPaths.Add(Path.Combine(".devmx", "attachments", fileName));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AppSession] Failed to stage attachments: {ex.Message}");
+        }
+        return relPaths;
     }
 
     /// <summary>

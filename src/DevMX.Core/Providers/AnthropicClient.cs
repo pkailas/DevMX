@@ -185,6 +185,41 @@ public sealed class AnthropicClient : IChatProvider
         });
     }
 
+    /// <summary>Build a user message with attachments (Anthropic multimodal content blocks).</summary>
+    public JsonNode BuildUserMessage(string text, IReadOnlyList<ChatAttachment> attachments)
+    {
+        var blocks = new JsonArray();
+        foreach (var att in attachments)
+        {
+            if (att.IsImage && att.Base64Data is not null)
+            {
+                blocks.Add(new JsonObject
+                {
+                    ["type"] = "image",
+                    ["source"] = new JsonObject
+                    {
+                        ["type"] = "base64",
+                        ["media_type"] = att.MediaType,
+                        ["data"] = att.Base64Data
+                    }
+                });
+            }
+            else if (att.TextContent is not null)
+            {
+                blocks.Add(new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = $"Attached file: {att.FileName}\n```\n{att.TextContent}\n```"
+                });
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            blocks.Add(new JsonObject { ["type"] = "text", ["text"] = text });
+        }
+        return BuildChatMessageNode("user", blocks);
+    }
+
     /// <summary>
     /// Build tool-result messages (Anthropic: one user message with all tool_result blocks).
     /// </summary>

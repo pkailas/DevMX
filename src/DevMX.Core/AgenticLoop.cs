@@ -135,10 +135,13 @@ public sealed class AgenticLoop
         Action<string> onAssistantText,
         Action<string, string> onToolCall,
         CancellationToken ct = default,
-        Action<string, string, string>? onToolResult = null)
+        Action<string, string, string>? onToolResult = null,
+        IReadOnlyList<ChatAttachment>? attachments = null)
     {
         // 1. Build user message and append to history + store.
-        var userMsg = _llm.BuildUserMessage(userText);
+        var userMsg = attachments is { Count: > 0 }
+            ? _llm.BuildUserMessage(userText, attachments)
+            : _llm.BuildUserMessage(userText);
         _history.Add(userMsg);
 
         // Persist: extract content from the provider's user message format.
