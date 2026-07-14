@@ -532,6 +532,15 @@
                   </StackPanel>
                 </StackPanel>
 
+                <!-- Auto-compaction threshold -->
+                <StackPanel Margin="0,4">
+                  <TextBlock Text="Auto-compact at (tokens)" Foreground="{DynamicResource DimBrush}"/>
+                  <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <TextBox Text="{Binding Settings.CompactThresholdTokens, UpdateSourceTrigger=PropertyChanged}" Padding="4,2" Width="80"/>
+                    <TextBlock Text="0 = off, applies on reconnect" Foreground="{DynamicResource DimBrush}" FontStyle="Italic" Margin="6,0,0,3" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </StackPanel>
+
                 <!-- Read-only info -->
                <Border Margin="0,6,0,4" Padding="4" Background="{DynamicResource InputBackground}">
                 <StackPanel>
@@ -909,6 +918,9 @@
                          Foreground="{DynamicResource DimBrush}" Padding="8,2"/>
               <TextBlock Text="{Binding ZoomDisplayText}"
                          Foreground="{DynamicResource DimBrush}" Padding="8,2" Opacity="0.7"/>
+              <TextBlock Text="{Binding ContextDisplayText}"
+                         Foreground="{DynamicResource DimBrush}" Padding="8,2" Opacity="0.7"
+                         ToolTip="Estimated size of the open conversation's context sent to the model each turn"/>
             </StackPanel>
             <Button Grid.Column="1" Content="Reconnect"
                     Command="{Binding ReconnectCommand}" Background="{DynamicResource AccentBrush}" Foreground="White" Padding="6,2" Margin="4,2"

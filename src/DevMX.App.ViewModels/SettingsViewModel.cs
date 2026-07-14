@@ -23,6 +23,7 @@ public partial class SettingsViewModel : ObservableObject
     private string _originalTheme;
     private string _originalToolProfile;
     private string _originalPollThrottleSeconds;
+    private string _originalCompactThresholdTokens;
     private int _originalFontSize;
 
     [ObservableProperty]
@@ -51,6 +52,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string pollThrottleSeconds;
+
+    [ObservableProperty]
+    private string compactThresholdTokens;
 
     [ObservableProperty]
     private int fontSize;
@@ -113,6 +117,7 @@ public partial class SettingsViewModel : ObservableObject
         _originalTheme = settings.Theme;
         _originalToolProfile = settings.ToolProfile;
         _originalPollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+        _originalCompactThresholdTokens = settings.CompactThresholdTokens.ToString();
         _originalFontSize = settings.FontSize;
 
         // Set VM fields (triggers OnPropertyChanged but persist handlers no-op until _initialized)
@@ -125,6 +130,7 @@ public partial class SettingsViewModel : ObservableObject
         Theme = settings.Theme;
         ToolProfile = settings.ToolProfile;
         PollThrottleSeconds = settings.PollThrottleSeconds.ToString();
+        CompactThresholdTokens = settings.CompactThresholdTokens.ToString();
         FontSize = settings.FontSize;
 
         _initialized = true;
@@ -244,6 +250,14 @@ public partial class SettingsViewModel : ObservableObject
         }
         // else: keep fresh disk value
 
+        // Validate CompactThresholdTokens (0 = off)
+        if (int.TryParse(CompactThresholdTokens, out int compactVal) && compactVal >= 0)
+        {
+            fresh.CompactThresholdTokens = (CompactThresholdTokens != _originalCompactThresholdTokens)
+                ? compactVal
+                : fresh.CompactThresholdTokens;
+        }
+
         // Save the merged settings
         fresh.Save(_settingsPath ?? DevMxSettings.DefaultSettingsPath);
 
@@ -257,6 +271,7 @@ public partial class SettingsViewModel : ObservableObject
         Theme = fresh.Theme;
         ToolProfile = fresh.ToolProfile;
         PollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+        CompactThresholdTokens = fresh.CompactThresholdTokens.ToString();
         FontSize = fresh.FontSize;
 
         // Update originals to match the merged result (so subsequent Apply is idempotent)
@@ -269,6 +284,7 @@ public partial class SettingsViewModel : ObservableObject
         _originalTheme = fresh.Theme;
         _originalToolProfile = fresh.ToolProfile;
         _originalPollThrottleSeconds = fresh.PollThrottleSeconds.ToString();
+        _originalCompactThresholdTokens = fresh.CompactThresholdTokens.ToString();
         _originalFontSize = fresh.FontSize;
 
         _onApply();

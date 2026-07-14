@@ -32,6 +32,28 @@ public partial class MainViewModel : ObservableObject
     private string windowTitle = "DevMX";
 
     [ObservableProperty]
+    private string contextDisplayText = "";
+
+    /// <summary>Refresh the status-bar context meter from the session's history size.</summary>
+    private void RefreshContextMeter()
+    {
+        long chars = _session.ContextChars;
+        _dispatch(() => ContextDisplayText = chars > 0
+            ? $"ctx ~{Math.Max(1, chars / 4000)}k tokens"
+            : "");
+    }
+
+    /// <summary>Refresh the context meter whenever a turn finishes on the given chat VM.</summary>
+    private void HookContextMeter(ChatViewModel chatVm)
+    {
+        ((System.ComponentModel.INotifyPropertyChanged)chatVm).PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(ChatViewModel.IsBusy) && !chatVm.IsBusy)
+                RefreshContextMeter();
+        };
+    }
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ReconnectCommand))]
     private bool isBusy;
 
@@ -179,7 +201,9 @@ public partial class MainViewModel : ObservableObject
         Sidebar.OnDelegationsLoaded += (delegations) =>
         {
             TaskMonitor.PopulateFromDelegations(delegations);
+            RefreshContextMeter(); // fires after a conversation is opened
         };
+        HookContextMeter(chatVm);
 
         // Settings pane
         Settings = new SettingsViewModel(settings, () =>
@@ -221,6 +245,8 @@ public partial class MainViewModel : ObservableObject
 
             // Populate sidebar from store
             await Sidebar.PopulateConversationsAsync(_session.ConversationId);
+
+            RefreshContextMeter();
 
             // Start task monitor polling loop
             TaskMonitor.StartPolling();
@@ -290,6 +316,10 @@ public partial class MainViewModel : ObservableObject
         _settings.WorkDir = freshSettings.WorkDir;
         _settings.ServerExe = freshSettings.ServerExe;
         _settings.ToolProfile = freshSettings.ToolProfile;
+        _settings.PollThrottleSeconds = freshSettings.PollThrottleSeconds;
+        _settings.CompactThresholdTokens = freshSettings.CompactThresholdTokens;
+        _settings.VisionEndpoint = freshSettings.VisionEndpoint;
+        _settings.VisionModel = freshSettings.VisionModel;
 
         // Teardown
         _dispatch(() =>
@@ -351,7 +381,9 @@ public partial class MainViewModel : ObservableObject
         newSidebar.OnDelegationsLoaded += (delegations) =>
         {
             TaskMonitor.PopulateFromDelegations(delegations);
+            RefreshContextMeter();
         };
+        HookContextMeter(newChat);
 
         // Wire ChatViewModel onToolResult to TaskMonitor for task event tracking
         newChat.SetTaskToolResultCallback((toolName, argJson, resultText) =>
@@ -676,6 +708,7 @@ public partial class MainViewModel : ObservableObject
                 var raiseMethod = clearEvent.GetRaiseMethod()!;
                 raiseMethod.Invoke(Sidebar, null!);
             });
+            RefreshContextMeter();
         }
         catch (Exception ex)
         {

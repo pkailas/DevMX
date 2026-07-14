@@ -47,6 +47,9 @@ public sealed class AppSession : IAsyncDisposable
     /// <summary>Exposes the current provider for provider-name checks.</summary>
     public IChatProvider? Provider => _provider;
 
+    /// <summary>Approximate character size of the current conversation's in-memory history.</summary>
+    public long ContextChars => _loop?.HistoryChars ?? 0;
+
     /// <summary>Creates a session with the given settings.</summary>
     public AppSession(DevMxSettings settings)
     {
@@ -199,7 +202,7 @@ public sealed class AppSession : IAsyncDisposable
         Console.WriteLine($"[AppSession] Created conversation #{ConversationId}");
 
         // 7. Create initial AgenticLoop with tool profile
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, effectiveProfile, ClampPollThrottle(_settings.PollThrottleSeconds));
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, effectiveProfile, ClampPollThrottle(_settings.PollThrottleSeconds), _settings.CompactThresholdTokens);
 
         IsInitialized = true;
         Console.WriteLine($"[AppSession] Initialized: {ToolCount} tools | model={model} | provider={provider} | profile={effectiveProfile}");
@@ -237,7 +240,7 @@ public sealed class AppSession : IAsyncDisposable
 
         ConversationId = conversationId;
         var history = await AgenticLoop.LoadHistoryAsync(_store, conversationId);
-        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history, EffectiveToolProfile, ClampPollThrottle(_settings.PollThrottleSeconds));
+        _loop = new AgenticLoop(_provider, _mcp, _store, ConversationId, SystemPrompt, 50, history, EffectiveToolProfile, ClampPollThrottle(_settings.PollThrottleSeconds), _settings.CompactThresholdTokens);
         Console.WriteLine($"[AppSession] Opened conversation #{conversationId} ({history.Count} messages)");
     }
 

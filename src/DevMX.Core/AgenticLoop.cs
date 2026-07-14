@@ -25,7 +25,24 @@ public sealed class AgenticLoop
     private readonly List<JsonNode> _history;
     private readonly string _toolProfile;
     private readonly int _pollThrottleSeconds;
+    private readonly int _compactThresholdChars;
     private readonly Dictionary<string, DateTime> _lastPollTimeByJobId = new();
+
+    /// <summary>Sentinel prefix marking an auto-compaction digest message; history
+    /// loads skip everything before the last message carrying it.</summary>
+    public const string DigestPrefix = "[[conversation digest]]";
+
+    /// <summary>Approximate size of the in-memory history in JSON characters (~4 chars/token).</summary>
+    public long HistoryChars
+    {
+        get
+        {
+            long total = 0;
+            foreach (var m in _history)
+                total += m.ToJsonString().Length;
+            return total;
+        }
+    }
 
     /// <summary>
     /// Creates a new AgenticLoop starting with an empty conversation history.
@@ -38,8 +55,9 @@ public sealed class AgenticLoop
         string? systemPrompt = null,
         int maxIterations = 50,
         string toolProfile = ToolProfiles.Full,
-        int pollThrottleSeconds = 5)
-        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>(), toolProfile, pollThrottleSeconds)
+        int pollThrottleSeconds = 5,
+        int compactThresholdTokens = 0)
+        : this(llm, tools, store, conversationId, systemPrompt, maxIterations, new List<JsonNode>(), toolProfile, pollThrottleSeconds, compactThresholdTokens)
     {
     }
 
@@ -55,7 +73,8 @@ public sealed class AgenticLoop
         int maxIterations,
         List<JsonNode> history,
         string toolProfile = ToolProfiles.Full,
-        int pollThrottleSeconds = 5)
+        int pollThrottleSeconds = 5,
+        int compactThresholdTokens = 0)
     {
         _llm = llm;
         _tools = tools;
@@ -66,6 +85,7 @@ public sealed class AgenticLoop
         _history = history;
         _toolProfile = toolProfile;
         _pollThrottleSeconds = pollThrottleSeconds;
+        _compactThresholdChars = compactThresholdTokens * 4; // ~4 chars/token
     }
 
     /// <summary>
@@ -124,7 +144,29 @@ public sealed class AgenticLoop
                 ["content"] = content.DeepClone()
             });
         }
+
+        // Auto-compaction persists a digest of everything before it; on reload,
+        // drop the messages the digest replaces.
+        for (int i = history.Count - 1; i >= 0; i--)
+        {
+            if (IsDigestMessage(history[i]))
+            {
+                if (i > 0)
+                    history.RemoveRange(0, i);
+                break;
+            }
+        }
         return history;
+    }
+
+    private static bool IsDigestMessage(JsonNode msg)
+    {
+        if (msg is not JsonObject obj || obj["role"]?.GetValue<string>() != "user")
+            return false;
+        if (obj["content"] is not JsonArray arr || arr.Count == 0 || arr[0] is not JsonObject first)
+            return false;
+        return first["type"]?.GetValue<string>() == "text"
+            && (first["text"]?.GetValue<string>() ?? "").StartsWith(DigestPrefix, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -138,6 +180,11 @@ public sealed class AgenticLoop
         Action<string, string, string>? onToolResult = null,
         IReadOnlyList<ChatAttachment>? attachments = null)
     {
+        // 0. Auto-compact an overlong history before adding the new request.
+        var compactNote = await MaybeCompactAsync(ct);
+        if (compactNote != null)
+            onAssistantText(compactNote + "\n\n");
+
         // 1. Build user message and append to history + store.
         var userMsg = attachments is { Count: > 0 }
             ? _llm.BuildUserMessage(userText, attachments)
@@ -296,6 +343,144 @@ public sealed class AgenticLoop
                 var contentJson = ExtractContentJson(toolResultMsg);
                 await _store.AppendMessageAsync(_conversationId, "user", contentJson);
             }
+        }
+    }
+
+    /// <summary>
+    /// When history exceeds the compaction threshold: summarize EVERYTHING so far into a
+    /// digest via the LLM (no tools), then replace all but a recent verbatim tail with the
+    /// digest message. The digest is also persisted, so reloads skip the replaced rows.
+    /// Returns a user-facing note, or null when no compaction happened.
+    /// </summary>
+    private async Task<string?> MaybeCompactAsync(CancellationToken ct)
+    {
+        if (_compactThresholdChars <= 0 || _history.Count < 6)
+            return null;
+        long total = HistoryChars;
+        if (total < _compactThresholdChars)
+            return null;
+
+        try
+        {
+            // Keep a verbatim tail (~25% of the threshold) ending at a safe cut point:
+            // a plain user message, never a tool-result carrier (cutting before one would
+            // orphan the preceding tool_use and make providers reject the history).
+            long keepChars = _compactThresholdChars / 4;
+            long tail = 0;
+            int cut = -1;
+            for (int i = _history.Count - 1; i > 0; i--)
+            {
+                tail += _history[i].ToJsonString().Length;
+                if (tail >= keepChars && IsSafeCutBoundary(i))
+                {
+                    cut = i;
+                    break;
+                }
+            }
+            if (cut <= 0)
+                return null;
+
+            string rendered = RenderForDigest(_history, maxChars: 400_000);
+            string digestPrompt =
+                "Summarize the conversation below into a dense digest (at most ~1500 words) that preserves: " +
+                "project context; every decision and requirement; work completed; user preferences and corrections; " +
+                "unfinished tasks with their full requirements. Output ONLY the digest text.\n\n" + rendered;
+
+            var resp = await _llm.CreateMessageAsync(
+                new List<JsonNode> { _llm.BuildUserMessage(digestPrompt) },
+                Array.Empty<ToolDefinition>(), null, ct);
+            string digest = string.Join("\n", resp.TextBlocks).Trim();
+            if (digest.Length == 0)
+                return null;
+
+            var digestMsg = _llm.BuildUserMessage(DigestPrefix + "\n" + digest);
+            _history.RemoveRange(0, cut);
+            _history.Insert(0, digestMsg);
+            await _store.AppendMessageAsync(_conversationId, "user", ExtractContentJson(digestMsg));
+
+            return $"[info] conversation auto-compacted: ~{total / 4000}k → ~{HistoryChars / 4000}k tokens (older turns summarized into a digest)";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Compaction is best-effort - never block the actual turn over it.
+            Console.WriteLine($"[AgenticLoop] Compaction failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private bool IsSafeCutBoundary(int i)
+    {
+        if (_history[i] is not JsonObject obj || obj["role"]?.GetValue<string>() != "user")
+            return false;
+        // Anthropic tool_result carriers have role=user - not a turn boundary.
+        if (obj["content"] is JsonArray arr && arr.Count > 0 &&
+            arr[0] is JsonObject first && first["type"]?.GetValue<string>() == "tool_result")
+            return false;
+        return true;
+    }
+
+    /// <summary>Flatten history to readable text for the digest prompt (text blocks +
+    /// tool-call names; individual messages truncated; total capped).</summary>
+    private static string RenderForDigest(List<JsonNode> history, int maxChars)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var msg in history)
+        {
+            if (sb.Length >= maxChars)
+                break;
+            if (msg is not JsonObject obj)
+                continue;
+            string role = obj["role"]?.GetValue<string>() ?? "?";
+
+            if (obj["content"] is JsonValue cv && cv.TryGetValue<string>(out var plain))
+            {
+                AppendEntry(sb, role, plain);
+                continue;
+            }
+            if (obj["content"] is not JsonArray blocks)
+                continue;
+            foreach (var block in blocks)
+            {
+                if (block is not JsonObject b)
+                    continue;
+                switch (b["type"]?.GetValue<string>())
+                {
+                    case "text":
+                        AppendEntry(sb, role, b["text"]?.GetValue<string>() ?? "");
+                        break;
+                    case "tool_use":
+                        AppendEntry(sb, role, $"(called tool {b["name"]?.GetValue<string>()})");
+                        break;
+                    case "tool_result":
+                        var resultText = b["content"]?.ToJsonString() ?? "";
+                        AppendEntry(sb, "tool", resultText);
+                        break;
+                }
+            }
+            // OpenAI-style tool_calls on the message object itself
+            if (obj["tool_calls"] is JsonArray tcs)
+            {
+                foreach (var tc in tcs)
+                {
+                    var name = (tc as JsonObject)?["function"]?["name"]?.GetValue<string>();
+                    if (name != null)
+                        AppendEntry(sb, role, $"(called tool {name})");
+                }
+            }
+        }
+        return sb.Length > maxChars ? sb.ToString(0, maxChars) : sb.ToString();
+
+        static void AppendEntry(System.Text.StringBuilder sb, string role, string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+            if (text.Length > 1500)
+                text = text[..1500] + " …[truncated]";
+            sb.Append(role).Append(": ").AppendLine(text).AppendLine();
         }
     }
 

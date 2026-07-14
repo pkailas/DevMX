@@ -26,6 +26,10 @@ public sealed record DevMxSettings
     public string Theme { get; set; } = "dark";
     public string ToolProfile { get; set; } = "auto";
     public int PollThrottleSeconds { get; set; } = 5;
+
+    /// <summary>Auto-compact the conversation when its history exceeds roughly this many
+    /// tokens: older turns get summarized into a digest. 0 disables compaction.</summary>
+    public int CompactThresholdTokens { get; set; } = 100_000;
     public int FontSize { get; set; } = 13;
 
     public static string DefaultSettingsPath =>
