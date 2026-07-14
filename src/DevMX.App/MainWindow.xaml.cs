@@ -286,7 +286,7 @@ public partial class MainWindow : Window
                     Vm.Chat.ReportAttachmentIssue($"attachment skipped: {info.Name} exceeds {MaxImageBytes / (1024 * 1024)} MB image limit");
                     return;
                 }
-                var bytes = File.ReadAllBytes(path);
+                var bytes = ReadAllBytesShared(path);
                 Vm.Chat.AddAttachment(AttachmentViewModel.ForImage(info.Name, mediaType, Convert.ToBase64String(bytes)));
                 return;
             }
@@ -298,11 +298,14 @@ public partial class MainWindow : Window
                     Vm.Chat.ReportAttachmentIssue($"attachment skipped: {info.Name} exceeds {MaxImageBytes / (1024 * 1024)} MB image limit");
                     return;
                 }
-                var frame = System.Windows.Media.Imaging.BitmapFrame.Create(
-                    new Uri(path), System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-                Vm.Chat.AddAttachment(AttachmentViewModel.ForImage(
-                    Path.ChangeExtension(info.Name, ".png"), "image/png", EncodePngBase64(frame)));
+                using (var ms = new MemoryStream(ReadAllBytesShared(path)))
+                {
+                    var frame = System.Windows.Media.Imaging.BitmapFrame.Create(
+                        ms, System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                        System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                    Vm.Chat.AddAttachment(AttachmentViewModel.ForImage(
+                        Path.ChangeExtension(info.Name, ".png"), "image/png", EncodePngBase64(frame)));
+                }
                 return;
             }
 
@@ -312,7 +315,7 @@ public partial class MainWindow : Window
                 Vm.Chat.ReportAttachmentIssue($"attachment skipped: {info.Name} exceeds {MaxTextFileBytes / 1024} KB text file limit");
                 return;
             }
-            var raw = File.ReadAllBytes(path);
+            var raw = ReadAllBytesShared(path);
             if (Array.IndexOf(raw, (byte)0) >= 0)
             {
                 Vm.Chat.ReportAttachmentIssue($"attachment skipped: {info.Name} is a binary file (only images and text files are supported)");
@@ -347,6 +350,19 @@ public partial class MainWindow : Window
         {
             Vm.Chat.ReportAttachmentIssue($"paste failed: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Read a file while tolerating concurrent writers (live log files, etc.) —
+    /// File.ReadAllBytes denies write sharing and throws on files held open for writing.
+    /// </summary>
+    private static byte[] ReadAllBytesShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var ms = new MemoryStream();
+        fs.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private static string EncodePngBase64(System.Windows.Media.Imaging.BitmapSource image)
