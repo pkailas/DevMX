@@ -591,7 +591,10 @@ public sealed class AgenticLoop
                 if (resultObj != null)
                 {
                     var state = resultObj["state"]?.GetValue<string>();
-                    if (state is "done" or "failed" or "cancelled")
+                    // needs_input and stopped_incomplete are terminal for THIS job id —
+                    // resuming mints a NEW job id via devmind_task_continue, so leaving
+                    // the delegation record open would orphan it.
+                    if (state is "done" or "failed" or "cancelled" or "needs_input" or "stopped_incomplete")
                     {
                         var jobId = resultObj["job_id"]?.GetValue<string>() ?? "";
                         var journalJson = (toolName == "devmind_task_result") ? result : null;

@@ -110,12 +110,22 @@ public sealed class AppSession : IAsyncDisposable
         // ANNOUNCING an action ("Let me delegate it now.") without emitting the call.
         const string actNow = " IMPORTANT: when you decide to use a tool, emit the tool call in the SAME response — never end your turn after only announcing what you will do.";
 
+        // Delegated-task state handling: the DevMind server can pause a job with
+        // questions (needs_input) or stop it untrusted (stopped_incomplete, incl.
+        // reason 'thrashing'). Without this guidance models poll forever or blindly
+        // send 'continue' into a failed approach.
+        const string delegationStates =
+            " Delegated task states: needs_input means the agent paused with specific questions — fetch devmind_task_result, " +
+            "answer the questions via devmind_task_continue (ask the user first if you cannot answer them yourself). " +
+            "stopped_incomplete means the work is NOT trustworthy yet — check incomplete_reasons; for 'thrashing' " +
+            "(the same failure kept recurring) re-brief with more context or different instructions instead of a bare 'continue'.";
+
         if (effectiveProfile == DevMX.Core.ToolProfiles.Restricted)
         {
-            return $"You are DevMX, a developer assistant. You have read-only and delegation tools only. For ANY file modification, write a precise brief and delegate via devmind_task_start; review with diff_file and run_build. Working directory: {workDir}. Be concise and precise.{actNow}";
+            return $"You are DevMX, a developer assistant. You have read-only and delegation tools only. For ANY file modification, write a precise brief and delegate via devmind_task_start; review with diff_file and run_build. Working directory: {workDir}. Be concise and precise.{actNow}{delegationStates}";
         }
 
-        return $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.{actNow}";
+        return $"You are DevMX, a developer assistant. You have tools to read, write, and analyze code in the working directory: {workDir}. Be concise and precise. When asked to modify code, use the appropriate tool rather than outputting full file contents.{actNow}{delegationStates}";
     }
 
     /// <summary>
