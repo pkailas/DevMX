@@ -20,7 +20,7 @@ source. This takes about two minutes.
 | Windows 10/11 | DevMX.App is WPF (`net10.0-windows`). DevMX.Chat is a console app. |
 | .NET 10 SDK | https://dotnet.microsoft.com/download/dotnet/10.0 |
 | A DevMind install | DevMX launches and drives `DevMind.McpServer.exe` as its agent backend. Install DevMind first — see the *DevMind TUI — Installation Guide*. The default server path DevMX probes is `<DevMind repo>\dist\mcp\DevMind.McpServer.exe`; pass `--server` if yours lives elsewhere. |
-| An LLM provider | Either a local OpenAI-compatible endpoint (zero cost — the default points at DevMind's local server on `http://127.0.0.1:8080/v1`) or an Anthropic API key. |
+| An LLM provider | Either a local OpenAI-compatible endpoint (zero cost — the default points at DevMind's local server on `http://127.0.0.1:8080/v1`) or an Anthropic API key. For a complete, known-good local stack (llama.cpp model servers, embeddings, search, vector store), see [DevMind's LLM Server & Services Setup Guide](https://github.com/pkailas/DevMind/blob/master/docs/LLM-Server-Setup-Guide.md). |
 | Access to the DevMX repository | Clone access to the DevMX repo. |
 
 ---
