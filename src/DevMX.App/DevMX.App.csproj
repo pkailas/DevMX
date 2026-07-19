@@ -6,7 +6,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon>Ionline_Icon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+<Resource Include="Ionline_Icon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DevMX.App.ViewModels\DevMX.App.ViewModels.csproj" />
